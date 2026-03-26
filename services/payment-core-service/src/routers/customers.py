@@ -22,7 +22,7 @@ async def list_customers(merchant_id: int):
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
-async def get_customer(merchant_id: int, customer_id: int):
+async def get_customer(merchant_id: int, customer_id: str):
     customer = await customer_service.get_customer(merchant_id, customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -30,7 +30,7 @@ async def get_customer(merchant_id: int, customer_id: int):
 
 
 @router.put("/{customer_id}", response_model=CustomerResponse)
-async def update_customer(merchant_id: int, customer_id: int, data: CustomerUpdate):
+async def update_customer(merchant_id: int, customer_id: str, data: CustomerUpdate):
     customer = await customer_service.update_customer(
         merchant_id, customer_id, data.name, data.email, data.phone
     )
@@ -40,7 +40,7 @@ async def update_customer(merchant_id: int, customer_id: int, data: CustomerUpda
 
 
 @router.delete("/{customer_id}", status_code=204)
-async def delete_customer(merchant_id: int, customer_id: int):
+async def delete_customer(merchant_id: int, customer_id: str):
     deleted = await customer_service.delete_customer(merchant_id, customer_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Customer not found")

@@ -28,12 +28,13 @@ async def create_merchant(name: str, email: str) -> dict:
                 schema_name, merchant_id
             )
 
-            # 2. Create tenant schema + tables
+            # 2. Create tenant schema + tables (DUAL ID: BIGSERIAL internal PK + UUID external key)
             await conn.execute(f"CREATE SCHEMA {schema_name}")
 
             await conn.execute(f"""
                 CREATE TABLE {schema_name}.customers (
-                    customer_id   SERIAL PRIMARY KEY,
+                    id            BIGSERIAL PRIMARY KEY,
+                    customer_id   UUID UNIQUE NOT NULL,
                     name          VARCHAR(255) NOT NULL,
                     email         VARCHAR(255),
                     phone         VARCHAR(50),
@@ -44,8 +45,9 @@ async def create_merchant(name: str, email: str) -> dict:
 
             await conn.execute(f"""
                 CREATE TABLE {schema_name}.payments (
-                    payment_id    UUID PRIMARY KEY,
-                    customer_id   INT NOT NULL REFERENCES {schema_name}.customers(customer_id),
+                    id            BIGSERIAL PRIMARY KEY,
+                    payment_id    UUID UNIQUE NOT NULL,
+                    customer_ref  BIGINT NOT NULL REFERENCES {schema_name}.customers(id),
                     amount        DECIMAL(12,2) NOT NULL,
                     currency      VARCHAR(3) DEFAULT 'INR',
                     status        VARCHAR(30) DEFAULT 'created',
@@ -60,8 +62,9 @@ async def create_merchant(name: str, email: str) -> dict:
 
             await conn.execute(f"""
                 CREATE TABLE {schema_name}.refunds (
-                    refund_id     UUID PRIMARY KEY,
-                    payment_id    UUID NOT NULL REFERENCES {schema_name}.payments(payment_id),
+                    id            BIGSERIAL PRIMARY KEY,
+                    refund_id     UUID UNIQUE NOT NULL,
+                    payment_ref   BIGINT NOT NULL REFERENCES {schema_name}.payments(id),
                     amount        DECIMAL(12,2) NOT NULL,
                     reason        TEXT,
                     status        VARCHAR(30) DEFAULT 'initiated',
@@ -72,9 +75,10 @@ async def create_merchant(name: str, email: str) -> dict:
 
             await conn.execute(f"""
                 CREATE TABLE {schema_name}.ledger_entries (
-                    ledger_id     SERIAL PRIMARY KEY,
-                    payment_id    UUID REFERENCES {schema_name}.payments(payment_id),
-                    refund_id     UUID REFERENCES {schema_name}.refunds(refund_id),
+                    id            BIGSERIAL PRIMARY KEY,
+                    ledger_id     UUID UNIQUE NOT NULL,
+                    payment_ref   BIGINT REFERENCES {schema_name}.payments(id),
+                    refund_ref    BIGINT REFERENCES {schema_name}.refunds(id),
                     entry_type    VARCHAR(30) NOT NULL,
                     amount        DECIMAL(12,2) NOT NULL,
                     balance_after DECIMAL(12,2) NOT NULL,

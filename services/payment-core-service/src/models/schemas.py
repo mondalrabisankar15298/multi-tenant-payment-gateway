@@ -36,7 +36,7 @@ class CustomerUpdate(BaseModel):
 
 
 class CustomerResponse(BaseModel):
-    customer_id: int
+    customer_id: UUID
     name: str
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -47,7 +47,7 @@ class CustomerResponse(BaseModel):
 # ─── Payment ──────────────────────────────────────────────
 
 class PaymentCreate(BaseModel):
-    customer_id: int
+    customer_id: UUID
     amount: float
     currency: str = "INR"
     method: str  # card | upi | netbanking | wallet
@@ -57,7 +57,7 @@ class PaymentCreate(BaseModel):
 
 class PaymentResponse(BaseModel):
     payment_id: UUID
-    customer_id: int
+    customer_id: UUID
     amount: float
     currency: str
     status: str

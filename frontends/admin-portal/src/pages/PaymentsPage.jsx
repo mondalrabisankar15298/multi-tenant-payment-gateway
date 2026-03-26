@@ -22,7 +22,7 @@ export default function PaymentsPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    await api.createPayment(mid, { ...form, customer_id: Number(form.customer_id), amount: Number(form.amount) })
+    await api.createPayment(mid, { ...form, amount: Number(form.amount) })
     await fetchPayments()
     setShowForm(false)
     setForm({ customer_id: '', amount: '', method: 'card', description: '' })
