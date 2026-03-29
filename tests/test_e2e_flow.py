@@ -19,13 +19,15 @@ async def test_end_to_end_payment_flow():
         assert res.status_code == 201, f"Failed to create merchant: {res.text}"
         merchant = res.json()
         merchant_id = merchant["merchant_id"]
+        api_key = merchant["api_key"]
+        headers = {"X-API-Key": str(api_key)}
         
         # 2. Create a Customer for this merchant
         res = await client.post(f"{CORE_URL}/api/{merchant_id}/customers", json={
             "name": "John Doe",
             "email": "john.doe@example.com",
             "phone": "+1234567890"
-        })
+        }, headers=headers)
         assert res.status_code == 201, f"Failed to create customer: {res.text}"
         customer = res.json()
         customer_id = customer["customer_id"]
@@ -35,18 +37,18 @@ async def test_end_to_end_payment_flow():
             "customer_id": customer_id,
             "amount": 150.50,
             "currency": "USD",
-            "method": "credit_card",
+            "method": "card",
             "description": "Test E2E Payment"
-        })
+        }, headers=headers)
         assert res.status_code == 201, f"Failed to create payment: {res.text}"
         payment = res.json()
         payment_id = payment["payment_id"]
         
         # 4. Authorize and Capture Payment
-        res = await client.post(f"{CORE_URL}/api/{merchant_id}/payments/{payment_id}/authorize")
+        res = await client.post(f"{CORE_URL}/api/{merchant_id}/payments/{payment_id}/authorize", headers=headers)
         assert res.status_code == 200, f"Failed to authorize payment: {res.text}"
         
-        res = await client.post(f"{CORE_URL}/api/{merchant_id}/payments/{payment_id}/capture")
+        res = await client.post(f"{CORE_URL}/api/{merchant_id}/payments/{payment_id}/capture", headers=headers)
         assert res.status_code == 200, f"Failed to capture payment: {res.text}"
         assert res.json()["status"] == "captured"
         
@@ -56,10 +58,14 @@ async def test_end_to_end_payment_flow():
         payments = []
         for i in range(max_retries):
             await asyncio.sleep(2)
-            res = await client.get(f"{DASHBOARD_URL}/api/{merchant_id}/payments?limit=10&offset=0")
+            res = await client.get(f"{DASHBOARD_URL}/api/{merchant_id}/payments?limit=10&offset=0", headers=headers)
             if res.status_code == 200:
                 body = res.json()
                 items = body.get("items", []) if isinstance(body, dict) else body
+                # The dashboard response structure for list payments is {"data": [...], "total": ...}
+                if isinstance(body, dict) and "data" in body:
+                    items = body["data"]
+                
                 synced = next((p for p in items if p["payment_id"] == payment_id), None)
                 if synced and synced["status"] == "captured":
                     payments = items
@@ -77,7 +83,7 @@ async def test_end_to_end_payment_flow():
         res = await client.post(f"{CORE_URL}/api/{merchant_id}/payments/{payment_id}/refund", json={
             "amount": 50.00,
             "reason": "Partial E2E Refund"
-        })
+        }, headers=headers)
         assert res.status_code == 201, f"Failed to create refund: {res.text}"
         refund = res.json()
         

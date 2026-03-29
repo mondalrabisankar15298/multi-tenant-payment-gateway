@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   test:
@@ -18,10 +18,10 @@ jobs:
     - name: Wait for services
       run: sleep 45
       
-    - name: Run Integration Tests
+    - name: Run All Tests
       run: |
-        pip install pytest pytest-asyncio httpx
-        pytest tests/test_integration.py
+        pip install pytest pytest-asyncio httpx uuid6
+        pytest tests/
         
     - name: Tear down
       run: docker-compose down
