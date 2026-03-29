@@ -2,6 +2,8 @@ import asyncpg
 import json
 from .config import settings
 
+pool = None
+
 async def init_connection(conn):
     await conn.set_type_codec('jsonb', encoder=json.dumps, decoder=json.loads, schema='pg_catalog')
     await conn.set_type_codec('json', encoder=json.dumps, decoder=json.loads, schema='pg_catalog')

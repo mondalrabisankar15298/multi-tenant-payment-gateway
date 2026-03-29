@@ -36,24 +36,39 @@ jobs:
       run: |
         echo "Waiting for all services to be healthy..."
         for i in {1..30}; do
-          # Only monitor containers that HAVE a health check defined.
-          # This avoids getting stuck on worker or init containers without health status.
-          STATUSES=$(docker compose ps --format json | jq -r 'if type == "array" then .[] else . end | select(type == "object" and (.Health | . != null and . != "")) | .Health')
+          # Get State and Health for all containers
+          DATA=$(docker compose ps --format json | jq -c 'if type == "array" then .[] else . end | select(type=="object") | {Name: .Name, State: .State, Health: (.Health // "none")}')
           
-          if [ -z "$STATUSES" ]; then
-            echo "Waiting for health-managed containers to appear..."
+          # 1. Check for reboot loops
+          RESTARTING=$(echo "$DATA" | jq -r 'select(.State == "restarting") | .Name')
+          if [ -n "$RESTARTING" ]; then
+            echo "CRITICAL: Some services are RESTARTING (possible crash): $RESTARTING"
+            docker compose logs $RESTARTING
+            sleep 5
+            continue
+          fi
+          
+          # 2. Check for unhealthy or starting services
+          UNHEALTHY=$(echo "$DATA" | jq -r 'select(.Health == "unhealthy") | .Name')
+          STARTING=$(echo "$DATA" | jq -r 'select(.Health == "starting") | .Name')
+          
+          if [ -n "$UNHEALTHY" ] || [ -n "$STARTING" ]; then
+            echo "Waiting for services to stabilize..."
+            [ -n "$UNHEALTHY" ] && echo "Unhealthy: $UNHEALTHY"
+            [ -n "$STARTING" ] && echo "Starting: $STARTING"
             sleep 5
             continue
           fi
 
-          if echo "$STATUSES" | grep -qv "healthy"; then
-            echo "Some services are still starting or unhealthy: $(echo "$STATUSES" | tr '\n' ' ')"
-            sleep 5
-          else
-            echo "All critical services are healthy!"
+          # 3. Final check: ensure we actually have healthy services
+          if echo "$DATA" | jq -e 'select(.Health == "healthy")' > /dev/null; then
+            echo "All critical services are healthy and stable!"
             docker compose ps
             exit 0
           fi
+          
+          echo "Waiting for initial health reports..."
+          sleep 5
         done
         echo "Error: Services did not become healthy in time."
         docker compose ps
