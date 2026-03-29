@@ -11,13 +11,14 @@ async def create_customer(merchant_id: int, name: str, email: str = None, phone:
     async with pool.acquire() as conn:
         async with conn.transaction():
             customer_id = uuid7()
+            now = datetime.now(timezone.utc)
             customer = await conn.fetchrow(
                 f"""
-                INSERT INTO {schema}.customers (customer_id, name, email, phone)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO {schema}.customers (customer_id, name, email, phone, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $5)
                 RETURNING customer_id, name, email, phone, created_at, updated_at
                 """,
-                customer_id, name, email, phone,
+                customer_id, name, email, phone, now,
             )
             await emit_event(
                 conn,
@@ -93,12 +94,13 @@ async def delete_customer(merchant_id: int, customer_id: str) -> bool:
             return True
 
 
-async def list_customers(merchant_id: int) -> list[dict]:
+async def list_customers(merchant_id: int, limit: int = 50, offset: int = 0) -> list[dict]:
     schema = await get_merchant_schema(merchant_id)
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            f"SELECT customer_id, name, email, phone, created_at, updated_at FROM {schema}.customers ORDER BY created_at DESC"
+            f"SELECT customer_id, name, email, phone, created_at, updated_at FROM {schema}.customers ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+            limit, offset
         )
         return [dict(r) for r in rows]
 

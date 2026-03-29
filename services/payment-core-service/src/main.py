@@ -62,20 +62,54 @@ app.include_router(refunds.router)
 
 # Events log endpoint
 @app.get("/api/events", tags=["events"])
-async def get_events(status: str = None, limit: int = 50):
-    """View domain_events outbox (for admin portal Events Log page)."""
+async def get_events(
+    status: str = None,
+    merchant_id: int = None,
+    entity_type: str = None,
+    event_type: str = None,
+    from_date: str = None,
+    to_date: str = None,
+    limit: int = 100,
+):
+    """View domain_events outbox with full filter support (admin portal)."""
     pool = await get_pool()
     async with pool.acquire() as conn:
+        conditions = []
+        params = []
+        idx = 1
+
         if status:
-            rows = await conn.fetch(
-                "SELECT * FROM public.domain_events WHERE status = $1 ORDER BY created_at DESC LIMIT $2",
-                status, limit,
-            )
-        else:
-            rows = await conn.fetch(
-                "SELECT * FROM public.domain_events ORDER BY created_at DESC LIMIT $1",
-                limit,
-            )
+            conditions.append(f"status = ${idx}")
+            params.append(status)
+            idx += 1
+        if merchant_id:
+            conditions.append(f"merchant_id = ${idx}")
+            params.append(merchant_id)
+            idx += 1
+        if entity_type:
+            conditions.append(f"entity_type = ${idx}")
+            params.append(entity_type)
+            idx += 1
+        if event_type:
+            conditions.append(f"event_type = ${idx}")
+            params.append(event_type)
+            idx += 1
+        if from_date:
+            conditions.append(f"created_at >= ${idx}::timestamptz")
+            params.append(from_date)
+            idx += 1
+        if to_date:
+            conditions.append(f"created_at <= ${idx}::timestamptz + interval '1 day'")
+            params.append(to_date)
+            idx += 1
+
+        where = " AND ".join(conditions) if conditions else "TRUE"
+        params.append(limit)
+
+        rows = await conn.fetch(
+            f"SELECT * FROM public.domain_events WHERE {where} ORDER BY created_at DESC LIMIT ${idx}",
+            *params,
+        )
         return [dict(r) for r in rows]
 
 

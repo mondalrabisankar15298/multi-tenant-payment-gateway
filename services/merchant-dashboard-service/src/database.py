@@ -1,7 +1,13 @@
 import asyncpg
 from .config import settings
+import json
 
 pool = None
+
+
+async def init_connection(conn):
+    await conn.set_type_codec('jsonb', encoder=json.dumps, decoder=json.loads, schema='pg_catalog')
+    await conn.set_type_codec('json', encoder=json.dumps, decoder=json.loads, schema='pg_catalog')
 
 
 async def get_pool() -> asyncpg.Pool:

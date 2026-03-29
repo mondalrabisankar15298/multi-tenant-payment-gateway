@@ -12,8 +12,14 @@ export default function CustomersPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [viewingCustomer, setViewingCustomer] = useState(null)
+  const [toast, setToast] = useState(null)
 
   const mid = selectedMerchant?.merchant_id
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }
 
   useEffect(() => {
     if (mid) fetchCustomers()
@@ -32,16 +38,25 @@ export default function CustomersPage() {
   }, [])
 
   const fetchCustomers = async () => {
-    const data = await api.getCustomers(mid)
-    setCustomers(data)
+    try {
+      const data = await api.getCustomers(mid)
+      setCustomers(data)
+    } catch (err) {
+      showToast(`Failed to load customers: ${err.message}`, 'error')
+    }
   }
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    await api.createCustomer(mid, { name, email, phone })
-    await fetchCustomers()
-    setShowForm(false)
-    setName(''); setEmail(''); setPhone('')
+    try {
+      await api.createCustomer(mid, { name, email, phone })
+      await fetchCustomers()
+      setShowForm(false)
+      setName(''); setEmail(''); setPhone('')
+      showToast('Customer created successfully!')
+    } catch (err) {
+      showToast(`Failed to create customer: ${err.message}`, 'error')
+    }
   }
 
   const openEdit = (cust) => {
@@ -57,13 +72,21 @@ export default function CustomersPage() {
       await api.updateCustomer(mid, editingCustomer.customer_id, { name, email, phone })
       await fetchCustomers()
       setEditingCustomer(null)
-    } catch (err) { alert(err.message) }
+      showToast('Customer updated successfully!')
+    } catch (err) {
+      showToast(`Failed to update customer: ${err.message}`, 'error')
+    }
   }
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this customer?')) return
-    await api.deleteCustomer(mid, id)
-    await fetchCustomers()
+    try {
+      await api.deleteCustomer(mid, id)
+      await fetchCustomers()
+      showToast('Customer deleted.')
+    } catch (err) {
+      showToast(`Failed to delete customer: ${err.message}`, 'error')
+    }
   }
 
   if (!mid) return <div className="empty-state"><h3>Select a merchant to manage customers</h3></div>
@@ -172,6 +195,17 @@ export default function CustomersPage() {
               <button className="btn btn-primary" onClick={() => setViewingCustomer(null)}>Close</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
+          padding: '12px 20px', borderRadius: '8px', fontWeight: 500, fontSize: '14px',
+          background: toast.type === 'error' ? '#ef4444' : '#22c55e',
+          color: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        }}>
+          {toast.type === 'error' ? '❌ ' : '✅ '}{toast.message}
         </div>
       )}
     </div>

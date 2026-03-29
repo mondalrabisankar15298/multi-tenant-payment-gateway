@@ -32,7 +32,11 @@ async def start_db_sync_consumer(shutdown_event: asyncio.Event):
 
             while not shutdown_event.is_set():
                 # Await msg with timeout to allow checking shutdown_event
-                msg = await asyncio.wait_for(consumer.getone(), timeout=1.0)
+                try:
+                    msg = await asyncio.wait_for(consumer.getone(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+
                 event = msg.value
                 event_id_str = event.get("event_id")
                 try:
@@ -71,8 +75,6 @@ async def start_db_sync_consumer(shutdown_event: asyncio.Event):
                         )
                     await consumer.commit()
 
-        except asyncio.TimeoutError:
-            continue
         except Exception as e:
             logger.error(f"DB Sync consumer error: {e}")
             await asyncio.sleep(5)

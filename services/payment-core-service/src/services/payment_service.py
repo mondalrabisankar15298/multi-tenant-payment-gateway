@@ -30,16 +30,17 @@ async def create_payment(merchant_id: int, customer_id: str, amount: Decimal,
             customer_internal_id = cust["id"]
 
             payment_id = uuid7()
+            now = datetime.now(timezone.utc)
             row = await conn.fetchrow(
                 f"""
                 INSERT INTO {schema}.payments
-                    (payment_id, customer_ref, amount, currency, method, description, metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+                    (payment_id, customer_ref, amount, currency, method, description, metadata, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $8)
                 RETURNING id, payment_id, customer_ref, amount, currency, status, method,
                           description, metadata, failure_reason, amount_refunded, created_at, updated_at
                 """,
                 payment_id, customer_internal_id, amount, currency, method, description,
-                metadata or {},
+                metadata or {}, now
             )
 
             # Build external-facing response (swap customer_ref BIGINT → customer_id UUID)
@@ -48,17 +49,17 @@ async def create_payment(merchant_id: int, customer_id: str, amount: Decimal,
             internal_id = payment.pop("id")
             payment.pop("customer_ref", None)
 
-            # Ledger entry using internal BIGINT
+            # Ledger entry using internal BIGINT and explicit UTC
             ledger_uuid = uuid7()
             await conn.execute(
                 f"""
                 INSERT INTO {schema}.ledger_entries
-                    (ledger_id, payment_ref, entry_type, amount, balance_after)
+                    (ledger_id, payment_ref, entry_type, amount, balance_after, created_at, updated_at)
                 VALUES ($1, $2, 'payment_created', $3,
                     (SELECT COALESCE(SUM(CASE WHEN entry_type LIKE 'payment%%' THEN amount ELSE -amount END), 0)
-                     FROM {schema}.ledger_entries) + $3)
+                     FROM {schema}.ledger_entries) + $3, $4, $4)
                 """,
-                ledger_uuid, internal_id, amount,
+                ledger_uuid, internal_id, amount, now
             )
 
             # Emit event with UUID-only payload
@@ -95,8 +96,9 @@ async def transition_payment(merchant_id: int, payment_id: str, target_status: s
                     f"Allowed: {allowed}"
                 )
 
+            now = datetime.now(timezone.utc)
             update_fields = "status = $1, updated_at = $3"
-            params = [target_status, payment_id, datetime.now(timezone.utc)]
+            params = [target_status, payment_id, now]
             if failure_reason and target_status == "failed":
                 update_fields += ", failure_reason = $4"
                 params.append(failure_reason)
@@ -124,12 +126,12 @@ async def transition_payment(merchant_id: int, payment_id: str, target_status: s
                 await conn.execute(
                     f"""
                     INSERT INTO {schema}.ledger_entries
-                        (ledger_id, payment_ref, entry_type, amount, balance_after)
+                        (ledger_id, payment_ref, entry_type, amount, balance_after, created_at, updated_at)
                     VALUES ($1, $2, 'payment_captured', $3,
                         (SELECT COALESCE(SUM(CASE WHEN entry_type LIKE 'payment%%' THEN amount ELSE -amount END), 0)
-                         FROM {schema}.ledger_entries))
+                         FROM {schema}.ledger_entries), $4, $4)
                     """,
-                    ledger_uuid, internal_id, Decimal(str(row["amount"])),
+                    ledger_uuid, internal_id, Decimal(str(row["amount"])), now
                 )
 
             # Event type mapping

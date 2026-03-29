@@ -15,8 +15,14 @@ export default function PaymentsPage() {
   const [viewingPayment, setViewingPayment] = useState(null)
   const [description, setDescription] = useState('')
   const [metadataString, setMetadataString] = useState('{}')
+  const [toast, setToast] = useState(null)
 
   const mid = selectedMerchant?.merchant_id
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }
 
   useEffect(() => {
     if (mid) { fetchPayments(); fetchCustomers() }
@@ -35,15 +41,32 @@ export default function PaymentsPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const fetchPayments = async () => setPayments(await api.getPayments(mid))
-  const fetchCustomers = async () => setCustomers(await api.getCustomers(mid))
+  const fetchPayments = async () => {
+    try {
+      setPayments(await api.getPayments(mid))
+    } catch (err) {
+      showToast(`Failed to load payments: ${err.message}`, 'error')
+    }
+  }
+  const fetchCustomers = async () => {
+    try {
+      setCustomers(await api.getCustomers(mid))
+    } catch (err) {
+      showToast(`Failed to load customers: ${err.message}`, 'error')
+    }
+  }
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    await api.createPayment(mid, { ...form, amount: Number(form.amount) })
-    await fetchPayments()
-    setShowForm(false)
-    setForm({ customer_id: '', amount: '', method: 'card', description: '' })
+    try {
+      await api.createPayment(mid, { ...form, amount: Number(form.amount) })
+      await fetchPayments()
+      setShowForm(false)
+      setForm({ customer_id: '', amount: '', method: 'card', description: '' })
+      showToast('Payment created successfully!')
+    } catch (err) {
+      showToast(`Failed to create payment: ${err.message}`, 'error')
+    }
   }
 
   const openEdit = (pay) => {
@@ -65,7 +88,10 @@ export default function PaymentsPage() {
       })
       await fetchPayments()
       setEditingPayment(null)
-    } catch (err) { alert(err.message) }
+      showToast('Payment updated!')
+    } catch (err) {
+      showToast(`Failed to update payment: ${err.message}`, 'error')
+    }
   }
 
   const handleAction = async (action, paymentId) => {
@@ -78,18 +104,24 @@ export default function PaymentsPage() {
         return
       }
       await fetchPayments()
-    } catch (err) { alert(err.message) }
+      showToast(`Payment ${action}d!`)
+    } catch (err) {
+      showToast(`Action failed: ${err.message}`, 'error')
+    }
   }
 
   const handleRefundSubmit = async (e) => {
     e.preventDefault()
     try {
       const amount = Number(refundModal.amount)
-      if (isNaN(amount) || amount <= 0) return alert("Invalid refund amount")
+      if (isNaN(amount) || amount <= 0) return showToast('Invalid refund amount', 'error')
       await api.createRefund(mid, refundModal.paymentId, { amount, reason: refundModal.reason })
       await fetchPayments()
       setRefundModal({ show: false, paymentId: null, amount: '', reason: '' })
-    } catch (err) { alert(err.message) }
+      showToast('Refund initiated successfully!')
+    } catch (err) {
+      showToast(`Refund failed: ${err.message}`, 'error')
+    }
   }
 
   if (!mid) return <div className="empty-state"><h3>Select a merchant to manage payments</h3></div>
@@ -273,6 +305,17 @@ export default function PaymentsPage() {
               <button className="btn btn-primary" onClick={() => setViewingPayment(null)}>Close</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
+          padding: '12px 20px', borderRadius: '8px', fontWeight: 500, fontSize: '14px',
+          background: toast.type === 'error' ? '#ef4444' : '#22c55e',
+          color: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        }}>
+          {toast.type === 'error' ? '❌ ' : '✅ '}{toast.message}
         </div>
       )}
     </div>

@@ -40,15 +40,16 @@ async def create_refund(merchant_id: int, payment_id: str, amount: Decimal,
                 pay["customer_ref"],
             )
 
-            # Insert refund with BIGINT FK
+            # Insert refund with BIGINT FK and explicit UTC
             refund_id = uuid7()
+            now = datetime.now(timezone.utc)
             row = await conn.fetchrow(
                 f"""
-                INSERT INTO {schema}.refunds (refund_id, payment_ref, amount, reason)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO {schema}.refunds (refund_id, payment_ref, amount, reason, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $5)
                 RETURNING refund_id, payment_ref, amount, reason, status, created_at, updated_at
                 """,
-                refund_id, payment_internal_id, amount, reason,
+                refund_id, payment_internal_id, amount, reason, now
             )
 
             # Build external response (swap payment_ref → payment_id UUID)
@@ -64,12 +65,12 @@ async def create_refund(merchant_id: int, payment_id: str, amount: Decimal,
             await conn.execute(
                 f"""
                 INSERT INTO {schema}.ledger_entries
-                    (ledger_id, payment_ref, refund_ref, entry_type, amount, balance_after)
+                    (ledger_id, payment_ref, refund_ref, entry_type, amount, balance_after, created_at, updated_at)
                 VALUES ($1, $2, $3, 'refund_issued', $4,
                     (SELECT COALESCE(SUM(CASE WHEN entry_type LIKE 'payment%%' THEN amount ELSE -amount END), 0)
-                     FROM {schema}.ledger_entries) - $4)
+                     FROM {schema}.ledger_entries) - $4, $5, $5)
                 """,
-                ledger_uuid, payment_internal_id, internal_refund_id, amount,
+                ledger_uuid, payment_internal_id, internal_refund_id, amount, now
             )
 
             # Emit event with UUID-only payload

@@ -1,9 +1,16 @@
 const BASE_URL = '/api'
+let _apiKey = null
 
 async function request(path, options = {}) {
   const { signal, ...rest } = options;
+  const headers = { 'Content-Type': 'application/json', ...rest.headers }
+  
+  if (_apiKey) {
+    headers['X-API-Key'] = _apiKey
+  }
+
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...rest.headers },
+    headers,
     signal,
     ...rest,
   })
@@ -12,6 +19,7 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  setApiKey: (key) => { _apiKey = key },
   getMerchants: (opts) => request('/merchants', opts),
   getPayments: (mid, params = '', opts) => request(`/${mid}/payments${params}`, opts),
   getPayment: (mid, id, opts) => request(`/${mid}/payments/${id}`, opts),

@@ -12,21 +12,22 @@ async def create_merchant(name: str, email: str) -> dict:
         async with conn.transaction():
             # 1. Insert merchant record
             api_key = uuid7()
+            now = datetime.now(timezone.utc)
             merchant = await conn.fetchrow(
                 """
-                INSERT INTO public.merchants (name, email, schema_name, api_key)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO public.merchants (name, email, schema_name, api_key, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $5)
                 RETURNING *
                 """,
-                name, email, "", api_key
+                name, email, "", api_key, now
             )
             merchant_id = merchant["merchant_id"]
             schema_name = f"m_{uuid7().hex}"
 
-            # Update schema_name
+            # Update schema_name and refreshed updated_at
             await conn.execute(
-                "UPDATE public.merchants SET schema_name = $1 WHERE merchant_id = $2",
-                schema_name, merchant_id
+                "UPDATE public.merchants SET schema_name = $1, updated_at = $3 WHERE merchant_id = $2",
+                schema_name, merchant_id, datetime.now(timezone.utc)
             )
 
             # 2. Create tenant schema + tables (DUAL ID: BIGSERIAL internal PK + UUID external key)

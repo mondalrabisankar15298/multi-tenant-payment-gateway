@@ -27,7 +27,11 @@ async def start_webhook_consumer(shutdown_event: asyncio.Event):
             logger.info("Webhook consumer started")
 
             while not shutdown_event.is_set():
-                msg = await asyncio.wait_for(consumer.getone(), timeout=1.0)
+                try:
+                    msg = await asyncio.wait_for(consumer.getone(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+
                 event = msg.value
                 logger.info(f"Webhook consumer received: {event.get('event_type')}")
 
@@ -38,8 +42,6 @@ async def start_webhook_consumer(shutdown_event: asyncio.Event):
 
                 await consumer.commit()
 
-        except asyncio.TimeoutError:
-            continue
         except Exception as e:
             logger.error(f"Webhook consumer error: {e}")
             await asyncio.sleep(5)

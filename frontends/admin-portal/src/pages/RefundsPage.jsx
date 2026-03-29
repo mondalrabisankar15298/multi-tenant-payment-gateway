@@ -7,7 +7,13 @@ export default function RefundsPage() {
   const { selectedMerchant } = useMerchant()
   const [refunds, setRefunds] = useState([])
   const [viewingRefund, setViewingRefund] = useState(null)
+  const [toast, setToast] = useState(null)
   const mid = selectedMerchant?.merchant_id
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }
 
   useEffect(() => {
     if (mid) fetchRefunds()
@@ -19,13 +25,22 @@ export default function RefundsPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const fetchRefunds = async () => setRefunds(await api.getRefunds(mid))
+  const fetchRefunds = async () => {
+    try {
+      setRefunds(await api.getRefunds(mid))
+    } catch (err) {
+      showToast(`Failed to load refunds: ${err.message}`, 'error')
+    }
+  }
 
   const handleProcess = async (refundId) => {
     try {
       await api.processRefund(mid, refundId)
       await fetchRefunds()
-    } catch (err) { alert(err.message) }
+      showToast('Refund processed!')
+    } catch (err) {
+      showToast(`Failed to process refund: ${err.message}`, 'error')
+    }
   }
 
   if (!mid) return <div className="empty-state"><h3>Select a merchant to view refunds</h3></div>
@@ -84,6 +99,17 @@ export default function RefundsPage() {
               <button className="btn btn-primary" onClick={() => setViewingRefund(null)}>Close</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
+          padding: '12px 20px', borderRadius: '8px', fontWeight: 500, fontSize: '14px',
+          background: toast.type === 'error' ? '#ef4444' : '#22c55e',
+          color: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        }}>
+          {toast.type === 'error' ? '❌ ' : '✅ '}{toast.message}
         </div>
       )}
     </div>

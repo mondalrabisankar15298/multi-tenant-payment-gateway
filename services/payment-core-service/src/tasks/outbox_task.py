@@ -2,6 +2,7 @@ import json
 import logging
 import psycopg2
 import psycopg2.extras
+from datetime import datetime, timezone
 from kafka import KafkaProducer
 from ..celery_app import celery
 from ..config import settings
@@ -66,11 +67,12 @@ def publish_pending_events(self):
         # Flush all messages together
         producer.flush()
 
-        # Update all statuses in one go
+        # Update all statuses and timestamps in one go (using explicit UTC from app)
         ids = [str(e["event_id"]) for e in events]
+        now = datetime.now(timezone.utc)
         cur.execute(
-            "UPDATE public.domain_events SET status = 'published' WHERE event_id = ANY(%s)",
-            (ids,)
+            "UPDATE public.domain_events SET status = 'published', updated_at = %s WHERE event_id = ANY(%s::uuid[])",
+            (now, ids)
         )
         conn.commit()
         published_count = len(ids)

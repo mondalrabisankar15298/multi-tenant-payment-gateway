@@ -1,9 +1,16 @@
 const BASE_URL = '/api'
+let globalApiKey = null;
+
+export const setApiKey = (key) => { globalApiKey = key; }
 
 async function request(path, options = {}) {
   const { signal, ...rest } = options;
+  const headers = { 'Content-Type': 'application/json', ...rest.headers };
+  if (globalApiKey) {
+    headers['X-API-Key'] = globalApiKey;
+  }
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...rest.headers },
+    headers,
     signal,
     ...rest,
   })
@@ -42,5 +49,11 @@ export const api = {
   getRefunds: (mid, opts) => request(`/${mid}/refunds`, opts),
 
   // Events
-  getEvents: (status, opts) => request(`/events${status ? `?status=${status}` : ''}`, opts),
+  getEvents: (params = {}, opts) => {
+    const qs = Object.entries(params)
+      .filter(([, v]) => v !== '' && v != null)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join('&')
+    return request(`/events${qs ? `?${qs}` : ''}`, opts)
+  },
 }
