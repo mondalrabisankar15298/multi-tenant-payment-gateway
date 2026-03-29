@@ -36,27 +36,23 @@ jobs:
       run: |
         echo "Waiting for all services to be healthy..."
         for i in {1..30}; do
-          # Robustly extract health status. Handles both array and NDJSON formats.
-          STATUSES=$(docker compose ps --format json | jq -r 'if type == "array" then .[] else . end | select(type == "object") | .Health // "none"')
+          # Only monitor containers that HAVE a health check defined.
+          # This avoids getting stuck on worker or init containers without health status.
+          STATUSES=$(docker compose ps --format json | jq -r 'if type == "array" then .[] else . end | select(type == "object" and (.Health | . != null and . != "")) | .Health')
           
           if [ -z "$STATUSES" ]; then
-            echo "Waiting for containers to appear..."
+            echo "Waiting for health-managed containers to appear..."
             sleep 5
             continue
           fi
 
-          if echo "$STATUSES" | grep -qvE "healthy|none"; then
+          if echo "$STATUSES" | grep -qv "healthy"; then
             echo "Some services are still starting or unhealthy: $(echo "$STATUSES" | tr '\n' ' ')"
             sleep 5
           else
-            # Check if we actually have services that should be healthy
-            if echo "$STATUSES" | grep -q "healthy"; then
-               echo "All critical services are healthy!"
-               docker compose ps
-               exit 0
-            fi
-            echo "Waiting for health status to appear..."
-            sleep 5
+            echo "All critical services are healthy!"
+            docker compose ps
+            exit 0
           fi
         done
         echo "Error: Services did not become healthy in time."
