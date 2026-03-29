@@ -135,7 +135,7 @@ services:
     networks:
       - payment-platform
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "python", "-c", "import http.client; c = http.client.HTTPConnection('localhost', 8001); c.request('GET', '/health'); r = c.getresponse(); exit(0 if r.status == 200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -196,7 +196,7 @@ services:
     networks:
       - payment-platform
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD", "python", "-c", "import http.client; c = http.client.HTTPConnection('localhost', 8002); c.request('GET', '/health'); r = c.getresponse(); exit(0 if r.status == 200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -249,7 +249,7 @@ services:
     networks:
       - payment-platform
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD", "python", "-c", "import http.client; c = http.client.HTTPConnection('localhost', 8003); c.request('GET', '/health'); r = c.getresponse(); exit(0 if r.status == 200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 5
