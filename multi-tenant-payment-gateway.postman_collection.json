@@ -1,0 +1,956 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Multi-Tenant Payment Gateway",
+    "description": "Complete API collection for all three microservices:\n- **System 1 — Payment Core Service** (port 8001): Write-side mutations (merchants, customers, payments, refunds, events)\n- **System 2 — Connect Service** (port 8002): Kafka event engine + Webhook Management\n- **System 3 — Merchant Dashboard Service** (port 8003): Read-Only analytics & dashboard APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "core_base_url",
+      "value": "http://localhost:8001",
+      "type": "string",
+      "description": "Payment Core Service base URL (System 1)"
+    },
+    {
+      "key": "connect_base_url",
+      "value": "http://localhost:8002",
+      "type": "string",
+      "description": "Connect Service base URL (System 2)"
+    },
+    {
+      "key": "dashboard_base_url",
+      "value": "http://localhost:8003",
+      "type": "string",
+      "description": "Merchant Dashboard Service base URL (System 3)"
+    },
+    {
+      "key": "merchant_id",
+      "value": "1",
+      "type": "string",
+      "description": "Default merchant ID for tenant-scoped endpoints"
+    },
+    {
+      "key": "api_key",
+      "value": "your-merchant-api-key-here",
+      "type": "string",
+      "description": "Merchant API key (UUID) for X-API-Key auth"
+    },
+    {
+      "key": "payment_id",
+      "value": "00000000-0000-0000-0000-000000000000",
+      "type": "string",
+      "description": "Payment UUID (replace after creating a payment)"
+    },
+    {
+      "key": "customer_id",
+      "value": "00000000-0000-0000-0000-000000000000",
+      "type": "string",
+      "description": "Customer UUID (replace after creating a customer)"
+    },
+    {
+      "key": "refund_id",
+      "value": "00000000-0000-0000-0000-000000000000",
+      "type": "string",
+      "description": "Refund UUID (replace after creating a refund)"
+    },
+    {
+      "key": "subscription_id",
+      "value": "1",
+      "type": "string",
+      "description": "Webhook subscription ID"
+    },
+    {
+      "key": "dlq_id",
+      "value": "1",
+      "type": "string",
+      "description": "Dead Letter Queue entry ID"
+    }
+  ],
+  "item": [
+    {
+      "name": "System 1 — Payment Core Service (port 8001)",
+      "description": "Write-side API: merchants, customers, payments, refunds, and domain events outbox.",
+      "item": [
+        {
+          "name": "Health",
+          "item": [
+            {
+              "name": "Health Check",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{core_base_url}}/health",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["health"]
+                },
+                "description": "Check the health status of the Payment Core Service and its database connection."
+              },
+              "response": [
+                {
+                  "name": "Healthy",
+                  "status": "OK",
+                  "code": 200,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"status\": \"healthy\",\n  \"service\": \"payment-core-service\",\n  \"components\": {\n    \"db\": \"ok\"\n  }\n}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Merchants",
+          "item": [
+            {
+              "name": "Create Merchant",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"}
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Acme Corp\",\n  \"email\": \"admin@acmecorp.com\"\n}",
+                  "options": {"raw": {"language": "json"}}
+                },
+                "url": {
+                  "raw": "{{core_base_url}}/api/merchants",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "merchants"]
+                },
+                "description": "Register a new merchant. Automatically creates a dedicated PostgreSQL schema for tenant isolation and generates an API key (UUID)."
+              },
+              "response": [
+                {
+                  "name": "Created",
+                  "status": "Created",
+                  "code": 201,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"merchant_id\": 1,\n  \"name\": \"Acme Corp\",\n  \"email\": \"admin@acmecorp.com\",\n  \"schema_name\": \"merchant_1\",\n  \"api_key\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"status\": \"active\",\n  \"created_at\": \"2026-03-30T11:00:00Z\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "List Merchants",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{core_base_url}}/api/merchants?limit=50&offset=0",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "merchants"],
+                  "query": [
+                    {"key": "limit", "value": "50", "description": "Number of records to return"},
+                    {"key": "offset", "value": "0", "description": "Pagination offset"}
+                  ]
+                },
+                "description": "List all registered merchants with pagination."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Merchant",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{core_base_url}}/api/merchants/{{merchant_id}}",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "merchants", "{{merchant_id}}"]
+                },
+                "description": "Get a single merchant by their integer ID."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Merchant",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"}
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Acme Corp Updated\",\n  \"email\": \"new-admin@acmecorp.com\",\n  \"status\": \"active\"\n}",
+                  "options": {"raw": {"language": "json"}}
+                },
+                "url": {
+                  "raw": "{{core_base_url}}/api/merchants/{{merchant_id}}",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "merchants", "{{merchant_id}}"]
+                },
+                "description": "Update merchant name, email, or status. All fields are optional. Status can be 'active' or 'suspended'."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Customers",
+          "item": [
+            {
+              "name": "Create Customer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"},
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"phone\": \"+91-9876543210\"\n}",
+                  "options": {"raw": {"language": "json"}}
+                },
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/customers",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "customers"]
+                },
+                "description": "Create a customer under a specific merchant's tenant schema. Requires X-API-Key header for authentication."
+              },
+              "response": [
+                {
+                  "name": "Created",
+                  "status": "Created",
+                  "code": 201,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"customer_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"phone\": \"+91-9876543210\",\n  \"created_at\": \"2026-03-30T11:00:00Z\",\n  \"updated_at\": \"2026-03-30T11:00:00Z\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "List Customers",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/customers?limit=50&offset=0",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "customers"],
+                  "query": [
+                    {"key": "limit", "value": "50"},
+                    {"key": "offset", "value": "0"}
+                  ]
+                },
+                "description": "List all customers for a specific merchant tenant."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Customer",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/customers/{{customer_id}}",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "customers", "{{customer_id}}"]
+                },
+                "description": "Get a specific customer by UUID."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Customer",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"},
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Jane Doe Updated\",\n  \"email\": \"jane.updated@example.com\",\n  \"phone\": \"+91-9000000000\"\n}",
+                  "options": {"raw": {"language": "json"}}
+                },
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/customers/{{customer_id}}",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "customers", "{{customer_id}}"]
+                },
+                "description": "Update a customer's name, email, or phone. All fields are optional."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Customer",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/customers/{{customer_id}}",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "customers", "{{customer_id}}"]
+                },
+                "description": "Delete a customer by UUID. Returns 204 No Content on success."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Payments",
+          "item": [
+            {
+              "name": "Create Payment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"},
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"amount\": 999.99,\n  \"currency\": \"INR\",\n  \"method\": \"upi\",\n  \"description\": \"Order #12345\",\n  \"metadata\": {\n    \"order_id\": \"ORD-12345\",\n    \"product\": \"Premium Plan\"\n  }\n}",
+                  "options": {"raw": {"language": "json"}}
+                },
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/payments",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments"]
+                },
+                "description": "Create a new payment. Currency: INR | USD | EUR. Method: card | upi | netbanking | wallet. Payment starts in 'pending' state."
+              },
+              "response": [
+                {
+                  "name": "Created",
+                  "status": "Created",
+                  "code": 201,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"payment_id\": \"550e8400-e29b-41d4-a716-446655440002\",\n  \"customer_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"amount\": \"999.99\",\n  \"currency\": \"INR\",\n  \"status\": \"pending\",\n  \"method\": \"upi\",\n  \"description\": \"Order #12345\",\n  \"metadata\": {\"order_id\": \"ORD-12345\"},\n  \"failure_reason\": null,\n  \"created_at\": \"2026-03-30T11:00:00Z\",\n  \"updated_at\": \"2026-03-30T11:00:00Z\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "List Payments",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/payments?limit=50&offset=0",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments"],
+                  "query": [
+                    {"key": "limit", "value": "50"},
+                    {"key": "offset", "value": "0"}
+                  ]
+                },
+                "description": "List all payments for a merchant tenant."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Payment",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/payments/{{payment_id}}",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments", "{{payment_id}}"]
+                },
+                "description": "Get a specific payment by UUID."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Payment",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"},
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"description\": \"Updated order description\",\n  \"metadata\": {\n    \"order_id\": \"ORD-12345\",\n    \"notes\": \"VIP customer\"\n  }\n}",
+                  "options": {"raw": {"language": "json"}}
+                },
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/payments/{{payment_id}}",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments", "{{payment_id}}"]
+                },
+                "description": "Update payment description and/or metadata. Status cannot be changed through this endpoint."
+              },
+              "response": []
+            },
+            {
+              "name": "Authorize Payment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/payments/{{payment_id}}/authorize",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments", "{{payment_id}}", "authorize"]
+                },
+                "description": "Transition a payment to 'authorized' state. Only valid from 'pending' state. Publishes a domain event to Kafka."
+              },
+              "response": []
+            },
+            {
+              "name": "Capture Payment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/payments/{{payment_id}}/capture",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments", "{{payment_id}}", "capture"]
+                },
+                "description": "Transition a payment to 'captured' state. Only valid from 'authorized' state. Publishes a domain event to Kafka."
+              },
+              "response": []
+            },
+            {
+              "name": "Fail Payment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/payments/{{payment_id}}/fail",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments", "{{payment_id}}", "fail"]
+                },
+                "description": "Mark a payment as 'failed'. Sets failure_reason to 'Payment declined'. Publishes a domain event to Kafka."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Refunds",
+          "item": [
+            {
+              "name": "Create Refund",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"},
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 250.00,\n  \"reason\": \"Customer requested cancellation\"\n}",
+                  "options": {"raw": {"language": "json"}}
+                },
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/payments/{{payment_id}}/refund",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments", "{{payment_id}}", "refund"]
+                },
+                "description": "Initiate a refund against a captured payment. Amount must be > 0 and ≤ original payment amount. Reason is optional."
+              },
+              "response": [
+                {
+                  "name": "Created",
+                  "status": "Created",
+                  "code": 201,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"refund_id\": \"550e8400-e29b-41d4-a716-446655440003\",\n  \"payment_id\": \"550e8400-e29b-41d4-a716-446655440002\",\n  \"amount\": \"250.00\",\n  \"reason\": \"Customer requested cancellation\",\n  \"status\": \"pending\",\n  \"created_at\": \"2026-03-30T11:00:00Z\",\n  \"updated_at\": \"2026-03-30T11:00:00Z\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Process Refund",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/refunds/{{refund_id}}/process",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "refunds", "{{refund_id}}", "process"]
+                },
+                "description": "Process/finalize a pending refund. Transitions it to 'processed' status and publishes a refund domain event to Kafka."
+              },
+              "response": []
+            },
+            {
+              "name": "List Refunds",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {"key": "X-API-Key", "value": "{{api_key}}"}
+                ],
+                "url": {
+                  "raw": "{{core_base_url}}/api/{{merchant_id}}/refunds?limit=50&offset=0",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "refunds"],
+                  "query": [
+                    {"key": "limit", "value": "50"},
+                    {"key": "offset", "value": "0"}
+                  ]
+                },
+                "description": "List all refunds for a merchant tenant."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Events (Outbox)",
+          "item": [
+            {
+              "name": "List Domain Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{core_base_url}}/api/events?limit=100",
+                  "host": ["{{core_base_url}}"],
+                  "path": ["api", "events"],
+                  "query": [
+                    {"key": "status", "value": "pending", "description": "pending | published | failed", "disabled": true},
+                    {"key": "merchant_id", "value": "{{merchant_id}}", "description": "Filter by merchant", "disabled": true},
+                    {"key": "entity_type", "value": "payment", "description": "payment | refund | customer | merchant", "disabled": true},
+                    {"key": "event_type", "value": "payment.captured", "description": "Specific event type string", "disabled": true},
+                    {"key": "from_date", "value": "2026-03-01T00:00:00Z", "description": "ISO timestamp from", "disabled": true},
+                    {"key": "to_date", "value": "2026-03-31T23:59:59Z", "description": "ISO timestamp to", "disabled": true},
+                    {"key": "limit", "value": "100", "description": "Max events to return"}
+                  ]
+                },
+                "description": "Admin endpoint: view the domain_events outbox table with rich filter support. Used to monitor event publishing status and debug Kafka pipeline issues."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "System 2 — Connect Service (port 8002)",
+      "description": "Event Engine: Kafka consumers + Webhook Subscription management + Dead Letter Queue.\nNo authentication required on these endpoints.",
+      "item": [
+        {
+          "name": "Health",
+          "item": [
+            {
+              "name": "Health Check",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{connect_base_url}}/health",
+                  "host": ["{{connect_base_url}}"],
+                  "path": ["health"]
+                },
+                "description": "Check the health of the Connect Service and its database connection."
+              },
+              "response": [
+                {
+                  "name": "Healthy",
+                  "status": "OK",
+                  "code": 200,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"status\": \"healthy\",\n  \"service\": \"connect-service\",\n  \"components\": {\n    \"db\": \"ok\"\n  }\n}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Webhook Subscriptions",
+          "item": [
+            {
+              "name": "Create Webhook Subscription",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"}
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"merchant_id\": {{merchant_id}},\n  \"url\": \"https://your-server.com/webhooks/payment-events\",\n  \"event_types\": [\n    \"payment.captured\",\n    \"payment.failed\",\n    \"refund.processed\"\n  ],\n  \"secret\": \"your-webhook-signing-secret\"\n}",
+                  "options": {"raw": {"language": "json"}}
+                },
+                "url": {
+                  "raw": "{{connect_base_url}}/api/webhooks",
+                  "host": ["{{connect_base_url}}"],
+                  "path": ["api", "webhooks"]
+                },
+                "description": "Register a new webhook endpoint to receive event notifications. Supported event_types: payment.captured, payment.failed, payment.authorized, refund.processed, etc."
+              },
+              "response": [
+                {
+                  "name": "Created",
+                  "status": "Created",
+                  "code": 201,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"subscription_id\": 1,\n  \"merchant_id\": 1,\n  \"url\": \"https://your-server.com/webhooks/payment-events\",\n  \"event_types\": [\"payment.captured\", \"payment.failed\", \"refund.processed\"],\n  \"secret\": \"your-webhook-signing-secret\",\n  \"active\": true,\n  \"created_at\": \"2026-03-30T11:00:00Z\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "List Webhook Subscriptions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{connect_base_url}}/api/webhooks?merchant_id={{merchant_id}}",
+                  "host": ["{{connect_base_url}}"],
+                  "path": ["api", "webhooks"],
+                  "query": [
+                    {"key": "merchant_id", "value": "{{merchant_id}}", "description": "Filter by merchant (optional)"}
+                  ]
+                },
+                "description": "List all webhook subscriptions. Optionally filter by merchant_id. Returns newest first."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Webhook Subscription",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{connect_base_url}}/api/webhooks/{{subscription_id}}",
+                  "host": ["{{connect_base_url}}"],
+                  "path": ["api", "webhooks", "{{subscription_id}}"]
+                },
+                "description": "Get a specific webhook subscription by its integer ID."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Webhook Subscription",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"}
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"url\": \"https://your-server.com/webhooks/v2\",\n  \"event_types\": [\n    \"payment.captured\",\n    \"payment.failed\"\n  ],\n  \"active\": true\n}",
+                  "options": {"raw": {"language": "json"}}
+                },
+                "url": {
+                  "raw": "{{connect_base_url}}/api/webhooks/{{subscription_id}}",
+                  "host": ["{{connect_base_url}}"],
+                  "path": ["api", "webhooks", "{{subscription_id}}"]
+                },
+                "description": "Update a webhook subscription's URL, event_types, or active status. All fields are optional (PATCH-style)."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Webhook Subscription",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{connect_base_url}}/api/webhooks/{{subscription_id}}",
+                  "host": ["{{connect_base_url}}"],
+                  "path": ["api", "webhooks", "{{subscription_id}}"]
+                },
+                "description": "Permanently delete a webhook subscription. Returns 204 No Content on success."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Webhook Delivery Logs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{connect_base_url}}/api/webhooks/{{subscription_id}}/logs?limit=50",
+                  "host": ["{{connect_base_url}}"],
+                  "path": ["api", "webhooks", "{{subscription_id}}", "logs"],
+                  "query": [
+                    {"key": "limit", "value": "50", "description": "Max delivery log entries (default 50)"}
+                  ]
+                },
+                "description": "View delivery attempt logs for a specific webhook subscription. Useful for debugging failed deliveries."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Dead Letter Queue (DLQ)",
+          "item": [
+            {
+              "name": "List DLQ Entries",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{connect_base_url}}/api/webhooks/dlq/entries?limit=50",
+                  "host": ["{{connect_base_url}}"],
+                  "path": ["api", "webhooks", "dlq", "entries"],
+                  "query": [
+                    {"key": "merchant_id", "value": "{{merchant_id}}", "description": "Filter by merchant (optional)", "disabled": true},
+                    {"key": "limit", "value": "50", "description": "Max entries to return"}
+                  ]
+                },
+                "description": "List all entries in the dead letter queue (permanently failed webhook deliveries after all retries exhausted). Optionally filter by merchant_id."
+              },
+              "response": []
+            },
+            {
+              "name": "Retry DLQ Entry",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{connect_base_url}}/api/webhooks/dlq/{{dlq_id}}/retry",
+                  "host": ["{{connect_base_url}}"],
+                  "path": ["api", "webhooks", "dlq", "{{dlq_id}}", "retry"]
+                },
+                "description": "Manually re-dispatch a failed webhook delivery from the DLQ via Celery. Removes the entry from the DLQ after queuing the retry task."
+              },
+              "response": [
+                {
+                  "name": "Retry Queued",
+                  "status": "OK",
+                  "code": 200,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"status\": \"retrying\",\n  \"dlq_id\": 1\n}"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "System 3 — Merchant Dashboard Service (port 8003)",
+      "description": "Read-Only API: analytics, payments list, refunds, customers, and merchant dropdown. Data is served from the read-replica database populated by System 2 Kafka consumers.",
+      "item": [
+        {
+          "name": "Health",
+          "item": [
+            {
+              "name": "Health Check",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/health",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["health"]
+                },
+                "description": "Check the health of the Merchant Dashboard Service and its read-replica database connection."
+              },
+              "response": [
+                {
+                  "name": "Healthy",
+                  "status": "OK",
+                  "code": 200,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"status\": \"healthy\",\n  \"service\": \"merchant-dashboard-service\",\n  \"components\": {\n    \"db\": \"ok\"\n  }\n}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Merchants",
+          "item": [
+            {
+              "name": "List Merchants (Dropdown)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/api/merchants",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["api", "merchants"]
+                },
+                "description": "List merchants from the read-side mirror table. Used to populate the merchant selector dropdown in the dashboard UI."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Analytics",
+          "item": [
+            {
+              "name": "Get Analytics Summary",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/api/{{merchant_id}}/analytics/summary",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "analytics", "summary"]
+                },
+                "description": "Get overall KPIs: total payments, total revenue, net revenue, success count, failed count, success rate (%), average payment amount, and total refunds."
+              },
+              "response": [
+                {
+                  "name": "Success",
+                  "status": "OK",
+                  "code": 200,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"total_payments\": 1250,\n  \"total_revenue\": 987654.50,\n  \"net_revenue\": 952123.00,\n  \"success_count\": 1180,\n  \"failed_count\": 70,\n  \"success_rate\": 94.40,\n  \"avg_payment_amount\": 790.12,\n  \"total_refunds\": 35531.50\n}"
+                }
+              ]
+            },
+            {
+              "name": "Get Daily Revenue",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/api/{{merchant_id}}/analytics/daily?days=30",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "analytics", "daily"],
+                  "query": [
+                    {"key": "days", "value": "30", "description": "Number of recent days to return (default 30)"}
+                  ]
+                },
+                "description": "Get daily revenue breakdown from the daily_revenue materialized view. Returns date, total_amount, payment_count, success_count, failed_count, refund_amount, and net_revenue per day."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Payment Method Stats",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/api/{{merchant_id}}/analytics/methods",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "analytics", "methods"]
+                },
+                "description": "Get payment method distribution from the payment_method_stats view. Returns method breakdown with count, total_amount, success_count, and success_rate."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Payments (Read-Only)",
+          "item": [
+            {
+              "name": "List Payments (Dashboard)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/api/{{merchant_id}}/payments?page=1&limit=25",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments"],
+                  "query": [
+                    {"key": "status", "value": "captured", "description": "pending | authorized | captured | failed | settled", "disabled": true},
+                    {"key": "method", "value": "upi", "description": "card | upi | netbanking | wallet", "disabled": true},
+                    {"key": "customer_id", "value": "{{customer_id}}", "description": "Filter by customer UUID", "disabled": true},
+                    {"key": "min_amount", "value": "100", "description": "Minimum amount filter", "disabled": true},
+                    {"key": "max_amount", "value": "10000", "description": "Maximum amount filter", "disabled": true},
+                    {"key": "from", "value": "2026-03-01", "description": "Start date (YYYY-MM-DD)", "disabled": true},
+                    {"key": "to", "value": "2026-03-31", "description": "End date (YYYY-MM-DD)", "disabled": true},
+                    {"key": "page", "value": "1", "description": "Page number (1-indexed)"},
+                    {"key": "limit", "value": "25", "description": "Records per page"}
+                  ]
+                },
+                "description": "Paginated payment list with rich filters: status, method, customer_id, amount range, date range. Returns data array, total count, page, limit, and pages."
+              },
+              "response": [
+                {
+                  "name": "Success",
+                  "status": "OK",
+                  "code": 200,
+                  "header": [{"key": "Content-Type", "value": "application/json"}],
+                  "body": "{\n  \"data\": [],\n  \"total\": 0,\n  \"page\": 1,\n  \"limit\": 25,\n  \"pages\": 0\n}"
+                }
+              ]
+            },
+            {
+              "name": "Get Payment (Dashboard)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/api/{{merchant_id}}/payments/{{payment_id}}",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "payments", "{{payment_id}}"]
+                },
+                "description": "Get a specific payment detail from the read-replica. No auth required (read-only dashboard context)."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Refunds (Read-Only)",
+          "item": [
+            {
+              "name": "List Refunds (Dashboard)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/api/{{merchant_id}}/refunds?limit=50",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "refunds"],
+                  "query": [
+                    {"key": "limit", "value": "50", "description": "Max refunds to return"}
+                  ]
+                },
+                "description": "List all refunds for a merchant from the read-replica. Returns newest first."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Customers (Read-Only)",
+          "item": [
+            {
+              "name": "List Customers (Dashboard)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/api/{{merchant_id}}/customers?limit=100",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "customers"],
+                  "query": [
+                    {"key": "limit", "value": "100", "description": "Max customers to return"}
+                  ]
+                },
+                "description": "List customers from the read-replica. Returns customer_id, name, email, phone, total_payments, total_spent, and last_payment_at."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Customer (Dashboard)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dashboard_base_url}}/api/{{merchant_id}}/customers/{{customer_id}}",
+                  "host": ["{{dashboard_base_url}}"],
+                  "path": ["api", "{{merchant_id}}", "customers", "{{customer_id}}"]
+                },
+                "description": "Get full customer details from the read-replica by UUID."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Platform Monitor · Payment Gateway</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #080c18; --surface: #0f1629; --card: #131d35;
+      --border:  rgba(99,102,241,.18); --primary: #6366f1;
+      --ok:      #10b981; --warn: #f59e0b; --err: #ef4444; --pending: #64748b;
+      --text:    #e2e8f0; --muted: #64748b; --mono: 'JetBrains Mono', monospace;
+    }
+    body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; padding-bottom:3rem; }
+
+    /* ── HEADER ── */
+    header {
+      background:linear-gradient(135deg,#0f1629,#131d35);
+      border-bottom:1px solid var(--border);
+      padding:1.25rem 2rem;
+      display:flex; align-items:center; justify-content:space-between;
+      position:sticky; top:0; z-index:100; backdrop-filter:blur(12px);
+    }
+    .logo{display:flex;align-items:center;gap:.75rem}
+    .logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--primary),#8b5cf6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem}
+    .logo-text{font-size:1rem;font-weight:600}
+    .logo-sub{font-size:.7rem;color:var(--muted);margin-top:1px}
+    .header-right{display:flex;align-items:center;gap:1rem}
+    .live-dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+    .live-dot.pulsing{animation:pulse-dot 2s infinite}
+    .live-dot.paused{background:var(--muted);animation:none}
+    @keyframes pulse-dot{0%{box-shadow:0 0 0 0 rgba(16,185,129,.4)}70%{box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+    .live-label{font-size:.75rem;font-weight:600}
+    #countdown{font-size:.75rem;color:var(--muted)}
+    #countdown span{color:var(--text);font-family:var(--mono);font-weight:600}
+    #last-checked{font-size:.72rem;color:var(--muted)}
+
+    .btn{padding:.45rem 1rem;font-size:.75rem;font-weight:600;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all .2s}
+    .btn-refresh{background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#a5b4fc}
+    .btn-toggle{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1);color:var(--text)}
+    .btn-stop{color:#fda4af;border-color:rgba(244,63,94,.3);background:rgba(244,63,94,.05)}
+    .btn-start{color:#86efac;border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.05)}
+    .btn-e2e{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:var(--warn)}
+
+    /* ── STATUS BANNER ── */
+    #status-banner{
+      margin:1.5rem 2rem; border-radius:16px; padding:1.4rem 1.75rem;
+      display:flex; align-items:center; justify-content:space-between;
+      border:1px solid transparent; transition:all .4s;
+    }
+    .banner-left{display:flex;align-items:center;gap:1rem}
+    .banner-icon{font-size:2rem}
+    .banner-title{font-size:1.1rem;font-weight:700}
+    .banner-sub{font-size:.8rem;color:rgba(255,255,255,.6);margin-top:2px}
+    .banner-score{font-family:var(--mono);font-size:1rem;font-weight:600;padding:.4rem .9rem;border-radius:8px;background:rgba(0,0,0,.2)}
+    .banner-healthy {background:linear-gradient(135deg,rgba(16,185,129,.15),rgba(16,185,129,.05));border-color:rgba(16,185,129,.4)}
+    .banner-degraded{background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(245,158,11,.05));border-color:rgba(245,158,11,.4)}
+    .banner-unhealthy{background:linear-gradient(135deg,rgba(239,68,68,.15),rgba(239,68,68,.05));border-color:rgba(239,68,68,.4)}
+    .banner-pending{background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(99,102,241,.05));border-color:rgba(99,102,241,.4)}
+
+    /* ── MAIN ── */
+    .main{padding:0 2rem}
+    .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem}
+    .summary-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.25rem 1.5rem;display:flex;flex-direction:column;gap:.5rem;transition:border-color .3s}
+    .summary-card:hover{border-color:var(--primary)}
+    .sc-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+    .sc-status{display:flex;align-items:center;gap:.6rem}
+    .sc-bullet{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+    .sc-name{font-size:.9rem;font-weight:600}
+    .sc-score{font-size:.75rem;color:var(--muted);font-family:var(--mono)}
+
+    /* ── PIPELINE FLOW ── */
+    .pipeline-card,.detail-card,.e2e-card,.history-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.5rem;margin-bottom:1rem}
+    .section-title{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:1.1rem}
+    .pipeline-flow{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
+    .pf-node{display:flex;flex-direction:column;align-items:center;gap:.4rem}
+    .pf-box{background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:.6rem 1rem;font-size:.8rem;font-weight:500;text-align:center;min-width:110px;transition:border-color .3s,box-shadow .3s}
+    .pf-box.ok{border-color:var(--ok);box-shadow:0 0 14px rgba(16,185,129,.15)}
+    .pf-box.error{border-color:var(--err);box-shadow:0 0 14px rgba(239,68,68,.15)}
+    .pf-box.degraded{border-color:var(--warn);box-shadow:0 0 14px rgba(245,158,11,.15)}
+    .pf-box.pending{border-color:var(--pending)}
+    .pf-label{font-size:.65rem;color:var(--muted)}
+    .pf-arrow{color:var(--muted);font-size:1.2rem;flex-shrink:0}
+
+    /* ── CHECK ROWS ── */
+    .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+    .check-row{display:flex;align-items:center;justify-content:space-between;padding:.55rem 0;border-bottom:1px solid rgba(255,255,255,.04)}
+    .check-row:last-child{border-bottom:none}
+    .check-left{display:flex;align-items:center;gap:.65rem}
+    .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .check-name{font-size:.82rem;font-weight:500}
+    .check-sub{font-size:.65rem;color:var(--muted)}
+    .check-right{display:flex;align-items:center;gap:.75rem}
+    .latency{font-family:var(--mono);font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.04);padding:.15rem .5rem;border-radius:5px}
+    .check-badge{font-size:.68rem;padding:.2rem .55rem;border-radius:6px;font-weight:600}
+    .badge-ok{background:rgba(16,185,129,.15);color:var(--ok)}
+    .badge-error{background:rgba(239,68,68,.15);color:var(--err)}
+    .badge-warning{background:rgba(245,158,11,.15);color:var(--warn)}
+    .badge-pending{background:rgba(100,116,139,.15);color:var(--pending)}
+
+    /* ── E2E ── */
+    .e2e-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem}
+    .e2e-meta-row{display:flex;align-items:center;gap:1.5rem}
+    .e2e-countdown{font-size:.75rem;color:var(--muted)}
+    .e2e-countdown span{color:var(--warn);font-family:var(--mono);font-weight:700}
+    .e2e-steps{display:flex;flex-wrap:wrap;gap:.6rem}
+    .e2e-step{display:flex;align-items:center;gap:.4rem;background:var(--surface);border-radius:8px;padding:.45rem .75rem;font-size:.78rem}
+
+    /* ── HISTORY ── */
+    .history-hint{font-size:.72rem;color:var(--muted);margin-top:.3rem}
+    .history-dots{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:.75rem}
+    .h-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;transition:all .2s;position:relative;border:2px solid transparent}
+    .h-dot:hover{transform:scale(1.3);border-color:rgba(255,255,255,.5)}
+
+    /* ── MODAL ── */
+    .modal-overlay{
+      display:none;position:fixed;inset:0;z-index:1000;
+      background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+      align-items:center;justify-content:center;
+    }
+    .modal-overlay.open{display:flex}
+    .modal{
+      background:#0f1629;border:1px solid var(--primary);border-radius:18px;
+      width:min(680px,95vw);max-height:90vh;overflow-y:auto;
+      padding:2rem;position:relative;
+      box-shadow:0 0 60px rgba(99,102,241,.25);
+      animation:modal-in .2s ease;
+    }
+    @keyframes modal-in{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+    .modal-close{
+      position:absolute;top:1rem;right:1rem;background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.1);color:var(--text);
+      width:30px;height:30px;border-radius:8px;cursor:pointer;
+      font-size:1rem;display:flex;align-items:center;justify-content:center;transition:all .2s;
+    }
+    .modal-close:hover{background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.4)}
+    .modal-title{font-size:1rem;font-weight:700;margin-bottom:.25rem}
+    .modal-ts{font-size:.75rem;color:var(--muted);font-family:var(--mono);margin-bottom:1.5rem}
+    .modal-overall{display:inline-flex;align-items:center;gap:.5rem;padding:.35rem .9rem;border-radius:8px;font-size:.8rem;font-weight:600;margin-bottom:1.5rem}
+    .modal-section{margin-bottom:1.25rem}
+    .modal-section-title{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.6rem}
+    .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+    .modal-row{display:flex;align-items:center;justify-content:space-between;padding:.4rem .65rem;background:rgba(255,255,255,.03);border-radius:6px;font-size:.78rem}
+    .modal-e2e-steps{display:flex;flex-wrap:wrap;gap:.5rem}
+    .modal-step{display:flex;align-items:center;gap:.35rem;padding:.35rem .65rem;background:rgba(255,255,255,.03);border-radius:6px;font-size:.75rem}
+
+    /* utils */
+    .c-ok{color:var(--ok)} .c-warn{color:var(--warn)} .c-err{color:var(--err)} .c-pending{color:var(--pending)}
+    .bg-ok{background:var(--ok)} .bg-warn{background:var(--warn)} .bg-err{background:var(--err)} .bg-pending{background:var(--pending)}
+
+    @media(max-width:1000px){.summary-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:600px){.summary-grid{grid-template-columns:1fr};header{flex-wrap:wrap;gap:.75rem}}
+  </style>
+</head>
+<body>
+
+<!-- ── MODAL ── -->
+<div id="log-modal" class="modal-overlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">📄 Historical Log</div>
+    <div class="modal-ts" id="modal-ts">—</div>
+
+    <div id="modal-overall" class="modal-overall">—</div>
+
+    <!-- Infrastructure & Services -->
+    <div class="modal-section">
+      <div class="modal-section-title">🏗 Infrastructure & Services</div>
+      <div class="modal-grid" id="modal-infra-svc"></div>
+    </div>
+
+    <!-- Pipeline -->
+    <div class="modal-section">
+      <div class="modal-section-title">🔄 Pipeline Health</div>
+      <div id="modal-pipeline"></div>
+    </div>
+
+    <!-- E2E -->
+    <div class="modal-section">
+      <div class="modal-section-title">🧪 E2E Smoke Test</div>
+      <div class="modal-e2e-steps" id="modal-e2e"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div>
+      <div class="logo-text">Platform Monitor</div>
+      <div class="logo-sub">Multi-Tenant Payment Gateway</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div style="display:flex;align-items:center;gap:.5rem">
+      <div id="live-dot" class="live-dot"></div>
+      <span id="live-label" class="live-label">...</span>
+    </div>
+    <div id="countdown">Health check: <span id="hc-countdown">--</span>s</div>
+    <div id="last-checked">Fetching…</div>
+    <div style="display:flex;gap:.5rem;margin-left:.5rem">
+      <button id="toggle-btn" onclick="toggleMonitor()" class="btn btn-toggle">...</button>
+      <button onclick="fetchNow()" class="btn btn-refresh">↻ Refresh</button>
+    </div>
+  </div>
+</header>
+
+<!-- ── MAIN ── -->
+<main class="main">
+
+  <!-- Banner -->
+  <div id="status-banner" class="banner-pending">
+    <div class="banner-left">
+      <div class="banner-icon" id="banner-icon">⏳</div>
+      <div>
+        <div class="banner-title" id="banner-title">Initializing…</div>
+        <div class="banner-sub" id="banner-sub">Connecting to monitor service</div>
+      </div>
+    </div>
+    <div class="banner-score" id="banner-score">—/—</div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="summary-grid">
+    <div class="summary-card"><div class="sc-label">Infrastructure</div><div class="sc-status"><div class="sc-bullet bg-pending" id="sc-infra-dot"></div><div class="sc-name" id="sc-infra-name">—</div></div><div class="sc-score">core-db · read-db · redis · kafka</div></div>
+    <div class="summary-card"><div class="sc-label">Services</div><div class="sc-status"><div class="sc-bullet bg-pending" id="sc-svc-dot"></div><div class="sc-name" id="sc-svc-name">—</div></div><div class="sc-score">core · connect · dashboard</div></div>
+    <div class="summary-card"><div class="sc-label">Event Pipeline</div><div class="sc-status"><div class="sc-bullet bg-pending" id="sc-pipe-dot"></div><div class="sc-name" id="sc-pipe-name">—</div></div><div class="sc-score">Kafka → Connect → Read DB</div></div>
+    <div class="summary-card"><div class="sc-label">E2E Smoke Test</div><div class="sc-status"><div class="sc-bullet bg-pending" id="sc-e2e-dot"></div><div class="sc-name" id="sc-e2e-name">—</div></div><div class="sc-score" id="sc-e2e-score">Full transaction path</div></div>
+  </div>
+
+  <!-- Pipeline Flow -->
+  <div class="pipeline-card">
+    <div class="section-title">📡 Pipeline Data Flow</div>
+    <div class="pipeline-flow">
+      <div class="pf-node"><div class="pf-box pending" id="pf-core">Payment Core</div><div class="pf-label">Write API</div></div>
+      <div class="pf-arrow">→</div>
+      <div class="pf-node"><div class="pf-box pending" id="pf-outbox">Outbox</div><div class="pf-label">domain_events</div></div>
+      <div class="pf-arrow">→</div>
+      <div class="pf-node"><div class="pf-box pending" id="pf-kafka">Redpanda</div><div class="pf-label">Event Bus</div></div>
+      <div class="pf-arrow">→</div>
+      <div class="pf-node"><div class="pf-box pending" id="pf-connect">Connect</div><div class="pf-label">Consumer</div></div>
+      <div class="pf-arrow">→</div>
+      <div class="pf-node"><div class="pf-box pending" id="pf-readdb">Read DB</div><div class="pf-label">Mirror Sync</div></div>
+      <div class="pf-arrow">→</div>
+      <div class="pf-node"><div class="pf-box pending" id="pf-dashboard">Dashboard</div><div class="pf-label">Read API</div></div>
+    </div>
+  </div>
+
+  <!-- Detail Rows -->
+  <div class="detail-grid">
+    <div class="detail-card"><div class="section-title">🏗 Infrastructure</div><div id="infra-checks"></div></div>
+    <div class="detail-card"><div class="section-title">⚙️ Services</div><div id="service-checks"></div></div>
+  </div>
+  <div class="detail-card">
+    <div class="section-title">🔄 Pipeline Health</div>
+    <div id="pipeline-checks"></div>
+  </div>
+
+  <!-- E2E -->
+  <div class="e2e-card">
+    <div class="e2e-header">
+      <div class="section-title" style="margin-bottom:0">🧪 E2E Smoke Test</div>
+      <div class="e2e-meta-row">
+        <div id="e2e-last-meta" class="e2e-countdown">Last run: <span>—</span></div>
+        <div id="e2e-next-meta" class="e2e-countdown">Next run in: <span id="e2e-next-countdown">—</span></div>
+        <button onclick="runE2ENow()" class="btn btn-e2e">▶ Run Now</button>
+      </div>
+    </div>
+    <div class="e2e-steps" id="e2e-steps">
+      <div style="color:var(--muted);font-size:.8rem">Awaiting first run…</div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="history-card">
+    <div class="section-title" style="margin-bottom:.2rem">📊 Check History <span style="font-weight:400">(last 50 runs)</span></div>
+    <div class="history-hint">Click any dot to view the full log for that check.</div>
+    <div class="history-dots" id="history-dots"></div>
+  </div>
+
+</main>
+
+<script>
+  /* ── Helpers ── */
+  const COLOR = { ok:'#10b981',healthy:'#10b981',error:'#ef4444',unhealthy:'#ef4444',warning:'#f59e0b',degraded:'#f59e0b',pending:'#64748b' };
+  const ICON  = { healthy:'✅',degraded:'⚠️',unhealthy:'❌',pending:'⏳',ok:'✅',error:'❌',warning:'⚠️',skipped:'⏭️' };
+  const BADGE = { ok:'badge-ok',healthy:'badge-ok',error:'badge-error',unhealthy:'badge-error',warning:'badge-warning',degraded:'badge-warning',pending:'badge-pending' };
+  const sc    = s => COLOR[s]||COLOR.pending;
+  const icon  = s => ICON[s]||'⏳';
+  const badge = s => BADGE[s]||'badge-pending';
+  const fmtSecs = s => { const m=Math.floor(s/60),sec=s%60; return m>0?`${m}m ${sec}s`:`${sec}s`; };
+
+  /* ── State ── */
+  let isRunning = true;
+  let hcSecsLeft = 300;
+  let e2eSecsLeft = null;
+  let globalHistory = [];
+
+  /* ── Timers ── */
+  setInterval(() => {
+    if (isRunning) {
+      hcSecsLeft = Math.max(0, hcSecsLeft - 1);
+      document.getElementById('hc-countdown').textContent = hcSecsLeft;
+      if (e2eSecsLeft !== null) {
+        e2eSecsLeft = Math.max(0, e2eSecsLeft - 1);
+        document.getElementById('e2e-next-countdown').textContent = fmtSecs(e2eSecsLeft);
+      }
+    } else {
+      document.getElementById('hc-countdown').textContent = '--';
+      document.getElementById('e2e-next-countdown').textContent = '--';
+    }
+  }, 1000);
+
+  /* ── Fetch ── */
+  async function fetchNow() {
+    try {
+      const [sr, hr] = await Promise.all([fetch('/api/status'), fetch('/api/history')]);
+      const status = await sr.json();
+      globalHistory = await hr.json();
+      render(status, globalHistory);
+      if (status.is_running) hcSecsLeft = 300;
+    } catch(e) { console.error('Fetch error', e); }
+  }
+  setInterval(fetchNow, 10000);
+  fetchNow();
+
+  async function toggleMonitor() {
+    await fetch('/api/toggle', { method:'POST' });
+    fetchNow();
+  }
+
+  async function runE2ENow() {
+    await fetch('/api/e2e/run', { method:'POST' });
+    document.getElementById('e2e-steps').innerHTML = '<div style="color:var(--muted);font-size:.8rem">Running E2E test…</div>';
+  }
+
+  /* ── Render ── */
+  function render(d, history) {
+    isRunning = d.is_running;
+    e2eSecsLeft = d.e2e_next_run_seconds;
+    renderHeader(d);
+    renderBanner(d);
+    renderSummaryCards(d);
+    renderPipelineFlow(d);
+    renderInfra(d.layers?.infrastructure?.checks || {});
+    renderServices(d.layers?.services?.checks || {});
+    renderPipeline(d.layers?.pipeline?.checks || {});
+    renderE2E(d.e2e_smoke);
+    renderHistory(history);
+    const ts = d.timestamp ? new Date(d.timestamp) : null;
+    document.getElementById('last-checked').textContent = ts ? `Updated: ${ts.toLocaleTimeString()}` : '...';
+  }
+
+  function renderHeader(d) {
+    const dot = document.getElementById('live-dot');
+    const label = document.getElementById('live-label');
+    const btn = document.getElementById('toggle-btn');
+    if (isRunning) {
+      dot.className = 'live-dot pulsing'; label.textContent = 'RUNNING'; label.style.color = COLOR.ok;
+      btn.textContent = '⏹ Stop Checking'; btn.className = 'btn btn-toggle btn-stop';
+    } else {
+      dot.className = 'live-dot paused'; label.textContent = 'STOPPED'; label.style.color = COLOR.err;
+      btn.textContent = '▶ Start Checking'; btn.className = 'btn btn-toggle btn-start';
+    }
+  }
+
+  function renderBanner(d) {
+    const el = document.getElementById('status-banner');
+    const ov = d.overall || 'pending';
+    el.className = 'banner-' + ov;
+    document.getElementById('banner-icon').textContent = icon(ov);
+    document.getElementById('banner-title').textContent =
+      !isRunning ? '⏹ MONITORING PAUSED' :
+      ({ healthy:'✅ ALL SYSTEMS OK', degraded:'⚠️ SYSTEM DEGRADED', unhealthy:'❌ ISSUES DETECTED' }[ov] || '⏳ INITIALIZING...');
+    document.getElementById('banner-sub').textContent =
+      !isRunning ? 'Automatic checks suspended. Showing last known state.' :
+      d.timestamp ? `Last check at ${new Date(d.timestamp).toLocaleTimeString()}` : 'First check in progress...';
+    document.getElementById('banner-score').textContent = d.checks_total > 0 ? `${d.checks_passed}/${d.checks_total}` : '—';
+  }
+
+  function renderSummaryCards(d) {
+    const L = d.layers || {}, e = d.e2e_smoke || {};
+    setCard('infra', L.infrastructure?.status, '4 components');
+    setCard('svc',   L.services?.status,       '3 services');
+    setCard('pipe',  L.pipeline?.status,        'Event flow');
+    const e2eScore = e.duration_ms ? `${(e.duration_ms/1000).toFixed(1)}s last run` : 'Full path';
+    setCard('e2e',   e.status, e2eScore);
+  }
+  function setCard(id, status, score) {
+    const s = status || 'pending';
+    document.getElementById(`sc-${id}-dot`).style.background = sc(s);
+    document.getElementById(`sc-${id}-name`).textContent = ({healthy:'Healthy',unhealthy:'Unhealthy',degraded:'Degraded',pending:'Pending'}[s]||s);
+  }
+
+  function renderPipelineFlow(d) {
+    const i = d.layers?.infrastructure?.checks||{}, svc = d.layers?.services?.checks||{}, p = d.layers?.pipeline?.checks||{};
+    setFlow('pf-core',      svc.payment_core?.status);
+    setFlow('pf-outbox',    p.pending_events?.status);
+    setFlow('pf-kafka',     i.kafka?.status);
+    setFlow('pf-connect',   svc.connect_service?.status);
+    setFlow('pf-readdb',    i.read_db?.status);
+    setFlow('pf-dashboard', svc.merchant_dashboard?.status);
+  }
+  function setFlow(id, status) {
+    const el = document.getElementById(id);
+    if (el) el.className = 'pf-box ' + (status||'pending');
+  }
+
+  function makeCheckRow(name, check, sub='') {
+    const s = check?.status||'pending';
+    const lat = check?.latency_ms ? `${check.latency_ms}ms` : '';
+    const parts = [];
+    if (check?.count !== undefined) parts.push(`${check.count} pending`);
+    if (check?.merchant_count !== undefined) parts.push(`${check.merchant_count} merchants`);
+    if (check?.oldest_pending_age_seconds !== undefined) parts.push(`${check.oldest_pending_age_seconds}s lag`);
+    return `<div class="check-row">
+      <div class="check-left">
+        <div class="status-dot" style="background:${sc(s)}"></div>
+        <div><div class="check-name">${name}</div>${parts.length?`<div class="check-sub">${parts.join(' · ')}</div>`:''}</div>
+      </div>
+      <div class="check-right">
+        ${lat?`<span class="latency">${lat}</span>`:''}
+        <span class="check-badge ${badge(s)}">${s.toUpperCase()}</span>
+      </div>
+    </div>`;
+  }
+
+  const INFRA_LABELS = { core_db:'Core DB', read_db:'Read DB', redis:'Redis', kafka:'Redpanda' };
+  const SVC_LABELS   = { payment_core:'Payment Core', connect_service:'Connect Service', merchant_dashboard:'Dashboard Service' };
+  const PIPE_LABELS  = { pending_events:'Outbox Pending', event_lag:'Event Lag', read_db_mirror:'Mirror Sync (Read-DB)' };
+
+  function renderInfra(c)    { document.getElementById('infra-checks').innerHTML    = Object.entries(c).map(([k,v])=>makeCheckRow(INFRA_LABELS[k]||k,v)).join(''); }
+  function renderServices(c) { document.getElementById('service-checks').innerHTML  = Object.entries(c).map(([k,v])=>makeCheckRow(SVC_LABELS[k]||k,v)).join(''); }
+  function renderPipeline(c) { document.getElementById('pipeline-checks').innerHTML = Object.entries(c).map(([k,v])=>makeCheckRow(PIPE_LABELS[k]||k,v)).join(''); }
+
+  const E2E_LABELS = { create_merchant:'Create Merchant', create_customer:'Create Customer', create_payment:'Create Payment', payment_lifecycle:'Lifecycle', event_published:'Event Published', read_db_synced:'Read-DB Sync', cleanup:'Cleanup', exception:'Exception' };
+
+  function renderE2E(e2e) {
+    if (!e2e || e2e.status==='pending') { document.getElementById('e2e-steps').innerHTML='<div style="color:var(--muted);font-size:.8rem">Awaiting first run…</div>'; return; }
+    const ts = e2e.last_run ? new Date(e2e.last_run).toLocaleTimeString() : '—';
+    document.getElementById('e2e-last-meta').innerHTML = `Last run: <span>${ts}${e2e.duration_ms?' · '+(e2e.duration_ms/1000).toFixed(1)+'s':''}</span>`;
+    if (e2eSecsLeft !== null && isRunning) {
+      document.getElementById('e2e-next-countdown').textContent = fmtSecs(e2eSecsLeft);
+    }
+    document.getElementById('e2e-steps').innerHTML = Object.entries(e2e.steps||{}).map(([k,v])=>{
+      const s = v?.status||'pending';
+      return `<div class="e2e-step"><span style="color:${sc(s)}">${icon(s)}</span>${E2E_LABELS[k]||k}</div>`;
+    }).join('');
+  }
+
+  function renderHistory(history) {
+    if (!history || !history.length) return;
+    document.getElementById('history-dots').innerHTML = history.map((h,i)=>{
+      const s = h.overall||'pending';
+      const ts = h.timestamp ? new Date(h.timestamp).toLocaleString() : '';
+      return `<div class="h-dot" title="${ts} · ${h.checks_passed}/${h.checks_total}" style="background:${sc(s)}" onclick="openLog(${i})"></div>`;
+    }).join('');
+  }
+
+  /* ── Modal ── */
+  function openLog(index) {
+    const d = globalHistory[index];
+    if (!d) return;
+    const ov = d.overall || 'pending';
+
+    document.getElementById('modal-ts').textContent = d.timestamp ? new Date(d.timestamp).toLocaleString() : '—';
+
+    const overallEl = document.getElementById('modal-overall');
+    overallEl.textContent = `${icon(ov)} ${ov.toUpperCase()} · ${d.checks_passed}/${d.checks_total} checks passed`;
+    overallEl.style.background = sc(ov) + '22';
+    overallEl.style.color = sc(ov);
+
+    // Infra + Services grid
+    const infra = d.layers?.infrastructure?.checks || {};
+    const svcs  = d.layers?.services?.checks || {};
+    const allChecks = {...Object.fromEntries(Object.entries(infra).map(([k,v])=>[INFRA_LABELS[k]||k,v])),
+                       ...Object.fromEntries(Object.entries(svcs).map(([k,v])=>[SVC_LABELS[k]||k,v]))};
+    document.getElementById('modal-infra-svc').innerHTML = Object.entries(allChecks).map(([name,v])=>{
+      const s = v?.status||'pending';
+      return `<div class="modal-row"><span><span style="color:${sc(s)}">${icon(s)}</span> ${name}</span><span class="check-badge ${badge(s)}">${v?.latency_ms?v.latency_ms+'ms':s.toUpperCase()}</span></div>`;
+    }).join('');
+
+    // Pipeline
+    const pipe = d.layers?.pipeline?.checks || {};
+    document.getElementById('modal-pipeline').innerHTML = Object.entries(pipe).map(([k,v])=>{
+      const s = v?.status||'pending';
+      const extra = [v?.count!==undefined?`${v.count} pending`:'',v?.merchant_count!==undefined?`${v.merchant_count} merchants`:'',v?.oldest_pending_age_seconds!==undefined?`${v.oldest_pending_age_seconds}s lag`:''].filter(Boolean).join(' · ');
+      return `<div class="modal-row" style="margin-bottom:.3rem"><span><span style="color:${sc(s)}">${icon(s)}</span> ${PIPE_LABELS[k]||k}${extra?` <span style="color:var(--muted);font-size:.65rem">(${extra})</span>`:''}</span><span class="check-badge ${badge(s)}">${s.toUpperCase()}</span></div>`;
+    }).join('');
+
+    // E2E
+    const e2e = d.e2e_smoke || {};
+    const steps = e2e.steps || {};
+    document.getElementById('modal-e2e').innerHTML = Object.keys(steps).length
+      ? Object.entries(steps).map(([k,v])=>{const s=v?.status||'pending';return `<div class="modal-step"><span style="color:${sc(s)}">${icon(s)}</span>${E2E_LABELS[k]||k}</div>`;}).join('')
+      : '<span style="color:var(--muted);font-size:.8rem">No E2E data for this run</span>';
+
+    document.getElementById('log-modal').classList.add('open');
+  }
+
+  function closeModal() { document.getElementById('log-modal').classList.remove('open'); }
+  function closeModalOutside(e) { if (e.target.id==='log-modal') closeModal(); }
+  document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+</script>
+</body>
+</html>

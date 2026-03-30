@@ -297,6 +297,33 @@ services:
       - payment-platform
     restart: unless-stopped
 
+  # ─── PLATFORM MONITOR ───────────────────────────────────────────────────────
+
+  platform-monitor:
+    build:
+      context: ./services/platform-monitor
+      dockerfile: Dockerfile
+    container_name: platform-monitor
+    ports:
+      - "8888:8888"
+    env_file:
+      - .env
+    depends_on:
+      payment-core-service:
+        condition: service_healthy
+      connect-service:
+        condition: service_healthy
+      merchant-dashboard-service:
+        condition: service_healthy
+    networks:
+      - payment-platform
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
 volumes:
   core-db-data:
   read-db-data:
