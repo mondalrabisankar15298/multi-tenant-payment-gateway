@@ -6,6 +6,9 @@ import DataTable from '../components/DataTable'
 export default function PaymentsPage() {
   const { selectedMerchant } = useMerchant()
   const [payments, setPayments] = useState([])
+  const [totalItems, setTotalItems] = useState(0)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(25)
   const [customers, setCustomers] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ customer_id: '', amount: '', method: 'card', description: '' })
@@ -26,7 +29,7 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     if (mid) { fetchPayments(); fetchCustomers() }
-  }, [mid])
+  }, [mid, page, limit])
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -43,17 +46,25 @@ export default function PaymentsPage() {
 
   const fetchPayments = async () => {
     try {
-      setPayments(await api.getPayments(mid))
+      const data = await api.getPayments(mid, { page, limit })
+      setPayments(data.data)
+      setTotalItems(data.total)
     } catch (err) {
       showToast(`Failed to load payments: ${err.message}`, 'error')
     }
   }
   const fetchCustomers = async () => {
     try {
-      setCustomers(await api.getCustomers(mid))
+      const data = await api.getCustomers(mid, { limit: 1000 })
+      setCustomers(data.data || data)
     } catch (err) {
       showToast(`Failed to load customers: ${err.message}`, 'error')
     }
+  }
+
+  const handlePageChange = (newPage, newLimit) => {
+    setPage(newPage)
+    setLimit(newLimit)
   }
 
   const handleCreate = async (e) => {
@@ -179,6 +190,10 @@ export default function PaymentsPage() {
           data={payments} 
           actions={getActions} 
           onRowClick={setViewingPayment}
+          onPageChange={handlePageChange}
+          totalItems={totalItems}
+          currentPage={page}
+          itemsPerPage={limit}
         />
       </div>
 

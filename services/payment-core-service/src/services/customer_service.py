@@ -94,15 +94,19 @@ async def delete_customer(merchant_id: int, customer_id: str) -> bool:
             return True
 
 
-async def list_customers(merchant_id: int, limit: int = 50, offset: int = 0) -> list[dict]:
+async def list_customers(merchant_id: int, page: int = 1, limit: int = 25) -> tuple[list[dict], int]:
     schema = await get_merchant_schema(merchant_id)
     pool = await get_pool()
+    offset = (page - 1) * limit
     async with pool.acquire() as conn:
+        total = await conn.fetchval(
+            f"SELECT COUNT(*) FROM {schema}.customers"
+        )
         rows = await conn.fetch(
             f"SELECT customer_id, name, email, phone, created_at, updated_at FROM {schema}.customers ORDER BY created_at DESC LIMIT $1 OFFSET $2",
             limit, offset
         )
-        return [dict(r) for r in rows]
+        return [dict(r) for r in rows], total
 
 
 async def get_customer(merchant_id: int, customer_id: str) -> dict | None:

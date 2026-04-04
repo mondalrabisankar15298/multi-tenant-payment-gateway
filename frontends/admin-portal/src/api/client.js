@@ -23,32 +23,51 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  // Merchants
-  getMerchants: (opts) => request('/merchants', opts),
+  getMerchants: (params = {}, opts) => {
+    const qs = Object.entries({ page: 1, limit: 25, ...params })
+      .filter(([, v]) => v !== '' && v != null)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join('&')
+    return request(`/merchants${qs ? `?${qs}` : ''}`, opts)
+  },
   createMerchant: (data, opts) => request('/merchants', { method: 'POST', body: JSON.stringify(data), ...opts }),
   getMerchant: (id, opts) => request(`/merchants/${id}`, opts),
   updateMerchant: (id, data, opts) => request(`/merchants/${id}`, { method: 'PUT', body: JSON.stringify(data), ...opts }),
 
-  // Customers
-  getCustomers: (mid, opts) => request(`/${mid}/customers`, opts),
+  getCustomers: (mid, params = {}, opts) => {
+    const qs = Object.entries({ page: 1, limit: 25, ...params })
+      .filter(([, v]) => v !== '' && v != null)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join('&')
+    return request(`/${mid}/customers${qs ? `?${qs}` : ''}`, opts)
+  },
   createCustomer: (mid, data, opts) => request(`/${mid}/customers`, { method: 'POST', body: JSON.stringify(data), ...opts }),
   updateCustomer: (mid, id, data, opts) => request(`/${mid}/customers/${id}`, { method: 'PUT', body: JSON.stringify(data), ...opts }),
   deleteCustomer: (mid, id, opts) => request(`/${mid}/customers/${id}`, { method: 'DELETE', ...opts }),
 
-  // Payments
-  getPayments: (mid, opts) => request(`/${mid}/payments`, opts),
+  getPayments: (mid, params = {}, opts) => {
+    const qs = Object.entries({ page: 1, limit: 25, ...params })
+      .filter(([, v]) => v !== '' && v != null)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join('&')
+    return request(`/${mid}/payments${qs ? `?${qs}` : ''}`, opts)
+  },
   createPayment: (mid, data, opts) => request(`/${mid}/payments`, { method: 'POST', body: JSON.stringify(data), ...opts }),
   updatePayment: (mid, id, data, opts) => request(`/${mid}/payments/${id}`, { method: 'PUT', body: JSON.stringify(data), ...opts }),
   authorizePayment: (mid, id, opts) => request(`/${mid}/payments/${id}/authorize`, { method: 'POST', ...opts }),
   capturePayment: (mid, id, opts) => request(`/${mid}/payments/${id}/capture`, { method: 'POST', ...opts }),
   failPayment: (mid, id, opts) => request(`/${mid}/payments/${id}/fail`, { method: 'POST', ...opts }),
 
-  // Refunds
   createRefund: (mid, payId, data, opts) => request(`/${mid}/payments/${payId}/refund`, { method: 'POST', body: JSON.stringify(data), ...opts }),
   processRefund: (mid, refId, opts) => request(`/${mid}/refunds/${refId}/process`, { method: 'POST', ...opts }),
-  getRefunds: (mid, opts) => request(`/${mid}/refunds`, opts),
+  getRefunds: (mid, params = {}, opts) => {
+    const qs = Object.entries({ page: 1, limit: 25, ...params })
+      .filter(([, v]) => v !== '' && v != null)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join('&')
+    return request(`/${mid}/refunds${qs ? `?${qs}` : ''}`, opts)
+  },
 
-  // Events
   getEvents: (params = {}, opts) => {
     const qs = Object.entries(params)
       .filter(([, v]) => v !== '' && v != null)

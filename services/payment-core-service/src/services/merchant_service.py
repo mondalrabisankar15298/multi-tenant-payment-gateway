@@ -165,14 +165,18 @@ async def get_merchant_schema(merchant_id: int) -> str:
     return schema
 
 
-async def list_merchants(limit: int = 50, offset: int = 0) -> list[dict]:
+async def list_merchants(page: int = 1, limit: int = 25) -> tuple[list[dict], int]:
     pool = await get_pool()
+    offset = (page - 1) * limit
     async with pool.acquire() as conn:
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM public.merchants"
+        )
         rows = await conn.fetch(
             "SELECT * FROM public.merchants ORDER BY created_at DESC LIMIT $1 OFFSET $2",
             limit, offset
         )
-        return [dict(r) for r in rows]
+        return [dict(r) for r in rows], total
 
 
 async def get_merchant(merchant_id: int) -> dict | None:

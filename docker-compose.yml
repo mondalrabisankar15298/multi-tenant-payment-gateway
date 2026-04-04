@@ -8,11 +8,46 @@ services:
       POSTGRES_USER: ${CORE_DB_USER}
       POSTGRES_PASSWORD: ${CORE_DB_PASSWORD}
       POSTGRES_DB: ${CORE_DB_NAME}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-repl_secret}
     ports:
       - "5433:5432"
     volumes:
       - core-db-data:/var/lib/postgresql/data
       - ./infra/postgres/init-core-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./infra/postgres/setup-primary.sh:/docker-entrypoint-initdb.d/02-setup-primary.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CORE_DB_USER} -d ${CORE_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - payment-platform
+
+  core-db-replica:
+    image: postgres:16-alpine
+    container_name: core-db-replica
+    environment:
+      POSTGRES_USER: ${CORE_DB_USER}
+      POSTGRES_PASSWORD: ${CORE_DB_PASSWORD}
+      POSTGRES_DB: ${CORE_DB_NAME}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-repl_secret}
+      PRIMARY_HOST: core-db
+      PRIMARY_PORT: "5432"
+      REPL_USER: replicator
+    entrypoint: []
+    command: >
+      bash -c "
+        /scripts/setup-replica.sh &&
+        exec docker-entrypoint.sh postgres
+      "
+    ports:
+      - "5435:5432"
+    volumes:
+      - core-db-replica-data:/var/lib/postgresql/data
+      - ./infra/postgres/setup-replica.sh:/scripts/setup-replica.sh
+    depends_on:
+      core-db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${CORE_DB_USER} -d ${CORE_DB_NAME}"]
       interval: 5s
@@ -191,6 +226,8 @@ services:
     depends_on:
       core-db:
         condition: service_healthy
+      core-db-replica:
+        condition: service_healthy
       read-db:
         condition: service_healthy
       redis:
@@ -219,12 +256,14 @@ services:
       context: ./services/connect-service
       dockerfile: Dockerfile
     container_name: connect-celery-worker
-    command: celery -A src.celery_app worker --loglevel=info
+    command: celery -A src.celery_app:celery_app worker --loglevel=info
     env_file:
       - .env
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
     depends_on:
+      core-db:
+        condition: service_healthy
       read-db:
         condition: service_healthy
       redis:
@@ -297,7 +336,18 @@ services:
       - payment-platform
     restart: unless-stopped
 
-  # ─── PLATFORM MONITOR ───────────────────────────────────────────────────────
+  connect-gateway-admin:
+    build:
+      context: ./services/connect-service/ui
+      dockerfile: Dockerfile.ui
+    container_name: connect-gateway-admin
+    ports:
+      - "5175:80"
+    depends_on:
+      - connect-service
+    networks:
+      - payment-platform
+    restart: unless-stopped
 
   platform-monitor:
     build:
@@ -305,7 +355,7 @@ services:
       dockerfile: Dockerfile
     container_name: platform-monitor
     ports:
-      - "8888:8888"
+      - "5176:8888"
     env_file:
       - .env
     depends_on:
@@ -326,6 +376,7 @@ services:
 
 volumes:
   core-db-data:
+  core-db-replica-data:
   read-db-data:
   redis-data:
   redpanda-data:

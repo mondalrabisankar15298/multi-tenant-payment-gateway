@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.requests import Request
 
 from .database import get_pool, close_pool
-from .routers import merchants, customers, payments, refunds
+from .routers import merchants, customers, payments, refunds, seed_proxy
 from .config import settings
 from .utils.logger import setup_logging, get_logger
 from prometheus_client import make_asgi_app
@@ -56,6 +56,7 @@ app.include_router(merchants.router)
 app.include_router(customers.router)
 app.include_router(payments.router)
 app.include_router(refunds.router)
+app.include_router(seed_proxy.router)
 
 
 # Events log endpoint
@@ -67,9 +68,8 @@ async def get_events(
     event_type: str = None,
     from_date: str = None,
     to_date: str = None,
-    limit: int = 100,
 ):
-    """View domain_events outbox with full filter support (admin portal)."""
+    """View domain_events outbox with full filter support (admin portal). Returns all matching events."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         conditions = []
@@ -102,10 +102,9 @@ async def get_events(
             idx += 1
 
         where = " AND ".join(conditions) if conditions else "TRUE"
-        params.append(limit)
 
         rows = await conn.fetch(
-            f"SELECT * FROM public.domain_events WHERE {where} ORDER BY created_at DESC LIMIT ${idx}",
+            f"SELECT * FROM public.domain_events WHERE {where} ORDER BY created_at DESC",
             *params,
         )
         return [dict(r) for r in rows]

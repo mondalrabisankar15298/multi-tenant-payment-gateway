@@ -19,7 +19,6 @@ async def create_payment(merchant_id: int, customer_id: str, amount: Decimal,
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
-            # Resolve customer UUID → internal BIGINT id
             cust = await conn.fetchrow(
                 f"SELECT id, customer_id FROM {schema}.customers WHERE customer_id = $1",
                 customer_id,
@@ -42,13 +41,11 @@ async def create_payment(merchant_id: int, customer_id: str, amount: Decimal,
                 metadata or {}, now
             )
 
-            # Build external-facing response (swap customer_ref BIGINT → customer_id UUID)
             payment = dict(row)
             payment["customer_id"] = str(cust["customer_id"])
             internal_id = payment.pop("id")
             payment.pop("customer_ref", None)
 
-            # Ledger entry using internal BIGINT and explicit UTC
             ledger_uuid = uuid7()
             await conn.execute(
                 f"""
@@ -61,7 +58,6 @@ async def create_payment(merchant_id: int, customer_id: str, amount: Decimal,
                 ledger_uuid, internal_id, amount, now
             )
 
-            # Emit event with UUID-only payload
             await emit_event(
                 conn,
                 merchant_id=merchant_id,
@@ -107,19 +103,16 @@ async def transition_payment(merchant_id: int, payment_id: str, target_status: s
                 *params,
             )
 
-            # Resolve customer UUID for response
             cust = await conn.fetchrow(
                 f"SELECT customer_id FROM {schema}.customers WHERE id = $1",
                 updated_row["customer_ref"],
             )
 
-            # Build external response
             updated = dict(updated_row)
             updated["customer_id"] = str(cust["customer_id"]) if cust else None
             internal_id = updated.pop("id")
             updated.pop("customer_ref", None)
 
-            # Ledger entry for captured payments
             if target_status == "captured":
                 ledger_uuid = uuid7()
                 await conn.execute(
@@ -133,7 +126,6 @@ async def transition_payment(merchant_id: int, payment_id: str, target_status: s
                     ledger_uuid, internal_id, Decimal(str(row["amount"])), now
                 )
 
-            # Event type mapping
             event_type_map = {
                 "authorized": "payment.authorized.v1",
                 "captured": "payment.captured.v1",
@@ -157,7 +149,6 @@ async def update_payment(merchant_id: int, payment_id: str, description: str = N
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
-            # Only update description/metadata, never amount or status
             updated_row = await conn.fetchrow(
                 f"""
                 UPDATE {schema}.payments 
@@ -173,13 +164,11 @@ async def update_payment(merchant_id: int, payment_id: str, description: str = N
             if not updated_row:
                 return None
                 
-            # Resolve customer UUID for response
             cust = await conn.fetchrow(
                 f"SELECT customer_id FROM {schema}.customers WHERE id = $1",
                 updated_row["customer_ref"],
             )
 
-            # Build external response
             updated = dict(updated_row)
             updated["customer_id"] = str(cust["customer_id"]) if cust else None
             updated.pop("id")
@@ -197,10 +186,14 @@ async def update_payment(merchant_id: int, payment_id: str, description: str = N
             return updated
 
 
-async def list_payments(merchant_id: int, limit: int = 50, offset: int = 0) -> list[dict]:
+async def list_payments(merchant_id: int, page: int = 1, limit: int = 25) -> tuple[list[dict], int]:
     schema = await get_merchant_schema(merchant_id)
     pool = await get_pool()
+    offset = (page - 1) * limit
     async with pool.acquire() as conn:
+        total = await conn.fetchval(
+            f"SELECT COUNT(*) FROM {schema}.payments"
+        )
         rows = await conn.fetch(
             f"""
             SELECT p.payment_id, c.customer_id, p.amount, p.currency, p.status, p.method,
@@ -212,7 +205,7 @@ async def list_payments(merchant_id: int, limit: int = 50, offset: int = 0) -> l
             """,
             limit, offset
         )
-        return [dict(r) for r in rows]
+        return [dict(r) for r in rows], total
 
 
 async def get_payment(merchant_id: int, payment_id: str) -> dict | None:

@@ -135,10 +135,14 @@ async def process_refund(merchant_id: int, refund_id: str) -> dict | None:
             return updated
 
 
-async def list_refunds(merchant_id: int, limit: int = 50, offset: int = 0) -> list[dict]:
+async def list_refunds(merchant_id: int, page: int = 1, limit: int = 25) -> tuple[list[dict], int]:
     schema = await get_merchant_schema(merchant_id)
     pool = await get_pool()
+    offset = (page - 1) * limit
     async with pool.acquire() as conn:
+        total = await conn.fetchval(
+            f"SELECT COUNT(*) FROM {schema}.refunds"
+        )
         rows = await conn.fetch(
             f"""
             SELECT r.refund_id, p.payment_id, r.amount, r.reason, r.status,
@@ -150,4 +154,4 @@ async def list_refunds(merchant_id: int, limit: int = 50, offset: int = 0) -> li
             """,
             limit, offset
         )
-        return [dict(r) for r in rows]
+        return [dict(r) for r in rows], total

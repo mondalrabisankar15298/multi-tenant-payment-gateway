@@ -11,17 +11,16 @@ export function MerchantProvider({ children }) {
 
   const fetchMerchants = async () => {
     try {
-      const data = await api.getMerchants()
+      const res = await api.getMerchants()
+      const data = res.data || res
       setMerchants(data)
 
       if (data.length > 0) {
-        // Try to restore the previously selected merchant from localStorage
         const savedId = localStorage.getItem(STORAGE_KEY)
         const savedMerchant = savedId
           ? data.find(m => String(m.merchant_id) === savedId)
           : null
 
-        // Fall back to the first merchant if nothing is saved or it no longer exists
         const toSelect = savedMerchant || data[0]
         setApiKey(toSelect.api_key)
         setSelectedMerchantState(toSelect)

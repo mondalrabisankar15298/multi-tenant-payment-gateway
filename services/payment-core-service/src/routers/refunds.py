@@ -31,6 +31,13 @@ async def process_refund(merchant_id: int, refund_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/api/{merchant_id}/refunds", response_model=list[RefundResponse])
-async def list_refunds(merchant_id: int, limit: int = 50, offset: int = 0):
-    return await refund_service.list_refunds(merchant_id, limit, offset)
+@router.get("/api/{merchant_id}/refunds")
+async def list_refunds(merchant_id: int, page: int = 1, limit: int = 25):
+    data, total = await refund_service.list_refunds(merchant_id, page, limit)
+    return {
+        "data": data,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit,
+    }

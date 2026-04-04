@@ -21,9 +21,16 @@ async def create_customer(merchant_id: int, data: CustomerCreate):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("", response_model=list[CustomerResponse])
-async def list_customers(merchant_id: int, limit: int = 50, offset: int = 0):
-    return await customer_service.list_customers(merchant_id, limit, offset)
+@router.get("")
+async def list_customers(merchant_id: int, page: int = 1, limit: int = 25):
+    data, total = await customer_service.list_customers(merchant_id, page, limit)
+    return {
+        "data": data,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit,
+    }
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)

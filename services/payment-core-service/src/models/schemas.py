@@ -97,3 +97,23 @@ class RefundResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+# ─── Pagination ───────────────────────────────────────────
+
+class PaginatedResponse(BaseModel):
+    data: list
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+
+# ─── Pagination ───────────────────────────────────────────
+
+class PaginatedResponse(BaseModel):
+    data: list
+    total: int
+    page: int
+    limit: int
+    total_pages: int

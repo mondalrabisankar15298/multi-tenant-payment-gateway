@@ -14,9 +14,16 @@ async def create_merchant(data: MerchantCreate):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("", response_model=list[MerchantResponse])
-async def list_merchants(limit: int = 50, offset: int = 0):
-    return await merchant_service.list_merchants(limit, offset)
+@router.get("")
+async def list_merchants(page: int = 1, limit: int = 25):
+    data, total = await merchant_service.list_merchants(page, limit)
+    return {
+        "data": data,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit,
+    }
 
 
 @router.get("/{merchant_id}", response_model=MerchantResponse)

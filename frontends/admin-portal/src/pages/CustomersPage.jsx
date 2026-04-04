@@ -6,6 +6,9 @@ import DataTable from '../components/DataTable'
 export default function CustomersPage() {
   const { selectedMerchant } = useMerchant()
   const [customers, setCustomers] = useState([])
+  const [totalItems, setTotalItems] = useState(0)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(25)
   const [showForm, setShowForm] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [name, setName] = useState('')
@@ -23,7 +26,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     if (mid) fetchCustomers()
-  }, [mid])
+  }, [mid, page, limit])
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -39,11 +42,17 @@ export default function CustomersPage() {
 
   const fetchCustomers = async () => {
     try {
-      const data = await api.getCustomers(mid)
-      setCustomers(data)
+      const data = await api.getCustomers(mid, { page, limit })
+      setCustomers(data.data)
+      setTotalItems(data.total)
     } catch (err) {
       showToast(`Failed to load customers: ${err.message}`, 'error')
     }
+  }
+
+  const handlePageChange = (newPage, newLimit) => {
+    setPage(newPage)
+    setLimit(newLimit)
   }
 
   const handleCreate = async (e) => {
@@ -115,6 +124,10 @@ export default function CustomersPage() {
           columns={columns}
           data={customers}
           onRowClick={setViewingCustomer}
+          onPageChange={handlePageChange}
+          totalItems={totalItems}
+          currentPage={page}
+          itemsPerPage={limit}
           actions={(row) => (
             <>
               <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); openEdit(row); }}>Edit</button>

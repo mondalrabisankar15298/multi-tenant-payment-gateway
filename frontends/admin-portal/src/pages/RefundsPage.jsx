@@ -6,6 +6,9 @@ import DataTable from '../components/DataTable'
 export default function RefundsPage() {
   const { selectedMerchant } = useMerchant()
   const [refunds, setRefunds] = useState([])
+  const [totalItems, setTotalItems] = useState(0)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(25)
   const [viewingRefund, setViewingRefund] = useState(null)
   const [toast, setToast] = useState(null)
   const mid = selectedMerchant?.merchant_id
@@ -17,7 +20,7 @@ export default function RefundsPage() {
 
   useEffect(() => {
     if (mid) fetchRefunds()
-  }, [mid])
+  }, [mid, page, limit])
 
   useEffect(() => {
     const handleKeyDown = (e) => { if (e.key === 'Escape') setViewingRefund(null) }
@@ -27,10 +30,17 @@ export default function RefundsPage() {
 
   const fetchRefunds = async () => {
     try {
-      setRefunds(await api.getRefunds(mid))
+      const data = await api.getRefunds(mid, { page, limit })
+      setRefunds(data.data)
+      setTotalItems(data.total)
     } catch (err) {
       showToast(`Failed to load refunds: ${err.message}`, 'error')
     }
+  }
+
+  const handlePageChange = (newPage, newLimit) => {
+    setPage(newPage)
+    setLimit(newLimit)
   }
 
   const handleProcess = async (refundId) => {
@@ -66,6 +76,10 @@ export default function RefundsPage() {
           columns={columns}
           data={refunds}
           onRowClick={setViewingRefund}
+          onPageChange={handlePageChange}
+          totalItems={totalItems}
+          currentPage={page}
+          itemsPerPage={limit}
           actions={(row) =>
             row.status === 'initiated' ? (
               <button 

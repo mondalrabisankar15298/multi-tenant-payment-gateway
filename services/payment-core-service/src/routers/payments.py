@@ -22,9 +22,16 @@ async def create_payment(merchant_id: int, data: PaymentCreate):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("", response_model=list[PaymentResponse])
-async def list_payments(merchant_id: int, limit: int = 50, offset: int = 0):
-    return await payment_service.list_payments(merchant_id, limit, offset)
+@router.get("")
+async def list_payments(merchant_id: int, page: int = 1, limit: int = 25):
+    data, total = await payment_service.list_payments(merchant_id, page, limit)
+    return {
+        "data": data,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit,
+    }
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)
@@ -70,5 +77,13 @@ async def fail_payment(merchant_id: int, payment_id: str):
         return await payment_service.transition_payment(
             merchant_id, payment_id, "failed", failure_reason="Payment declined"
         )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{payment_id}/settle", response_model=PaymentResponse)
+async def settle_payment(merchant_id: int, payment_id: str):
+    try:
+        return await payment_service.transition_payment(merchant_id, payment_id, "settled")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
